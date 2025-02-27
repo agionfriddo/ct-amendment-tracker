@@ -143,7 +143,7 @@ export default function PdfTextExtractor({
           </div>
           <pre
             ref={textRef}
-            className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap overflow-auto flex-1 border border-gray-200 p-2 rounded bg-white dark:bg-gray-100 max-h-[600px] tabular-nums"
+            className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap overflow-visible flex-1 border border-gray-200 p-2 rounded bg-white dark:bg-gray-100 tabular-nums"
           >
             {text || "No text could be extracted from this PDF."}
           </pre>
