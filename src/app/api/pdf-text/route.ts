@@ -61,6 +61,20 @@ function improveTextFormatting(text: string): string {
   // Regular expression to identify congressperson references
   const congresspersonRegex = /^(REP\.|SEN\.)\s+[A-Z]+/i;
 
+  // Find the maximum line number to determine padding width
+  let maxLineNumberWidth = 0;
+  for (const line of lines) {
+    const lineNumberMatch = line.match(lineNumberRegex);
+    if (lineNumberMatch) {
+      maxLineNumberWidth = Math.max(
+        maxLineNumberWidth,
+        lineNumberMatch[1].length
+      );
+    }
+  }
+  // Ensure minimum padding of 3 spaces
+  maxLineNumberWidth = Math.max(maxLineNumberWidth, 3);
+
   // First pass: Join split district references
   for (let i = 0; i < lines.length - 2; i++) {
     // Check for pattern: "SEN. NAME, 11" followed by "th" followed by "Dist."
@@ -91,7 +105,12 @@ function improveTextFormatting(text: string): string {
     // Check if the line already has a line number at the beginning
     const startingLineNumberMatch = line.match(startingLineNumberRegex);
     if (startingLineNumberMatch) {
-      formattedLines.push(line);
+      // Reformat to ensure consistent padding
+      const lineNumber = startingLineNumberMatch[1];
+      const textContent = line.substring(startingLineNumberMatch[0].length);
+      formattedLines.push(
+        `${lineNumber.padStart(maxLineNumberWidth)} ${textContent}`
+      );
       continue;
     }
 
@@ -108,8 +127,10 @@ function improveTextFormatting(text: string): string {
       // Remove the line number from the end
       let textContent = line.replace(lineNumberRegex, "").trim();
 
-      // Add the line number to the beginning
-      formattedLines.push(`${lineNumber} ${textContent}`);
+      // Add the line number to the beginning with proper padding
+      formattedLines.push(
+        `${lineNumber.padStart(maxLineNumberWidth)} ${textContent}`
+      );
     }
     // Handle special formatting cases
     else if (sectionHeaderRegex.test(line)) {

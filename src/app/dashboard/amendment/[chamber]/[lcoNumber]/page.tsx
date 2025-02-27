@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useAmendments } from "@/context/AmendmentsContext";
 import PdfViewer from "@/components/PdfViewer";
+import PdfTextExtractor from "@/components/PdfTextExtractor";
 import Link from "next/link";
 
 export default function AmendmentDetailPage() {
@@ -193,6 +194,27 @@ export default function AmendmentDetailPage() {
         <div className="border-t border-gray-200">
           <div className="h-screen max-h-[800px]">
             <PdfViewer url={amendment.lcoLink} />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div className="px-4 py-5 sm:px-6">
+          <h3 className="text-lg leading-6 font-medium text-gray-900">
+            Amendment Text
+          </h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Extracted text from the amendment PDF
+          </p>
+        </div>
+        <div className="border-t border-gray-200">
+          <div className="p-4">
+            <PdfTextExtractor
+              pdfUrl={amendment.lcoLink}
+              title={`${
+                chamber === "senate" ? "Senate" : "House"
+              } Amendment ${lcoNumber}`}
+            />
           </div>
         </div>
       </div>
