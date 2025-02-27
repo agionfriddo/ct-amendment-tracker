@@ -4,11 +4,15 @@ import { useState, useEffect, useRef } from "react";
 import { Amendment } from "@/context/AmendmentsContext";
 import axios from "axios";
 import PdfViewer from "./PdfViewer";
+import * as Diff from "diff";
 
 interface PdfComparisonProps {
   leftAmendment: Amendment;
   rightAmendment: Amendment;
 }
+
+// Type for view mode
+type ViewMode = "text" | "pdf" | "diff";
 
 export default function PdfComparison({
   leftAmendment,
@@ -16,16 +20,18 @@ export default function PdfComparison({
 }: PdfComparisonProps) {
   const [leftText, setLeftText] = useState<string>("");
   const [rightText, setRightText] = useState<string>("");
+  const [diffResult, setDiffResult] = useState<Diff.Change[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [leftError, setLeftError] = useState<string | null>(null);
   const [rightError, setRightError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"text" | "pdf">("text");
+  const [viewMode, setViewMode] = useState<ViewMode>("text");
   const [debugInfo, setDebugInfo] = useState<any>(null);
 
   // Refs for the text containers
   const leftTextRef = useRef<HTMLPreElement>(null);
   const rightTextRef = useRef<HTMLPreElement>(null);
+  const diffTextRef = useRef<HTMLDivElement>(null);
   const [syncScrolling, setSyncScrolling] = useState(true);
   const isScrolling = useRef(false);
 
@@ -139,9 +145,24 @@ export default function PdfComparison({
     fetchPdfText();
   }, [leftAmendment.lcoLink, rightAmendment.lcoLink]);
 
+  // Calculate diff when texts change
+  useEffect(() => {
+    if (leftText && rightText) {
+      // Split the text into lines for line-by-line comparison
+      const leftLines = leftText.split("\n");
+      const rightLines = rightText.split("\n");
+
+      // Compute the diff
+      const diff = Diff.diffLines(leftText, rightText, {
+        ignoreWhitespace: false,
+      });
+      setDiffResult(diff);
+    }
+  }, [leftText, rightText]);
+
   // Set up synchronized scrolling
   useEffect(() => {
-    if (!syncScrolling || viewMode !== "text") return;
+    if (!syncScrolling || viewMode === "pdf") return;
 
     const handleLeftScroll = () => {
       if (
@@ -219,14 +240,65 @@ export default function PdfComparison({
     setSyncScrolling(!syncScrolling);
   };
 
-  // Toggle view mode between text and PDF
-  const toggleViewMode = () => {
-    setViewMode(viewMode === "text" ? "pdf" : "text");
+  // Toggle view mode
+  const changeViewMode = (mode: ViewMode) => {
+    setViewMode(mode);
   };
 
   // Toggle debug information
   const toggleDebugInfo = () => {
     setDebugInfo(debugInfo ? null : { error, leftError, rightError });
+  };
+
+  // Render diff with highlighted changes
+  const renderDiff = () => {
+    if (!diffResult.length) return "No differences found.";
+
+    return (
+      <div className="diff-container">
+        {diffResult.map((part, index) => {
+          // Skip parts with no content
+          if (!part.value.trim()) return null;
+
+          const lines = part.value.split("\n");
+
+          return (
+            <div
+              key={index}
+              className={`diff-part ${
+                part.added
+                  ? "diff-added"
+                  : part.removed
+                  ? "diff-removed"
+                  : "diff-unchanged"
+              }`}
+            >
+              {lines.map((line, lineIndex) => {
+                if (!line && lineIndex === lines.length - 1) return null;
+
+                return (
+                  <div
+                    key={`${index}-${lineIndex}`}
+                    className={`diff-line ${
+                      part.added
+                        ? "bg-green-100"
+                        : part.removed
+                        ? "bg-red-100"
+                        : ""
+                    }`}
+                  >
+                    <span className="line-prefix">
+                      {part.added ? "+ " : part.removed ? "- " : "  "}
+                    </span>
+                    <span>{line}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   if (loading) {
@@ -265,7 +337,7 @@ export default function PdfComparison({
         </div>
 
         <div className="flex flex-col items-center">
-          {viewMode === "text" && (
+          {viewMode !== "pdf" && (
             <button
               onClick={toggleSyncScrolling}
               className={`px-3 py-1 text-xs rounded mb-2 ${
@@ -278,12 +350,38 @@ export default function PdfComparison({
             </button>
           )}
 
-          <button
-            onClick={toggleViewMode}
-            className="px-3 py-1 text-xs rounded mb-2 bg-indigo-600 text-white"
-          >
-            {viewMode === "text" ? "Switch to PDF View" : "Switch to Text View"}
-          </button>
+          <div className="flex space-x-2 mb-2">
+            <button
+              onClick={() => changeViewMode("text")}
+              className={`px-3 py-1 text-xs rounded ${
+                viewMode === "text"
+                  ? "bg-indigo-600 text-white"
+                  : "bg-gray-200 text-gray-700"
+              }`}
+            >
+              Text View
+            </button>
+            <button
+              onClick={() => changeViewMode("diff")}
+              className={`px-3 py-1 text-xs rounded ${
+                viewMode === "diff"
+                  ? "bg-indigo-600 text-white"
+                  : "bg-gray-200 text-gray-700"
+              }`}
+            >
+              Diff View
+            </button>
+            <button
+              onClick={() => changeViewMode("pdf")}
+              className={`px-3 py-1 text-xs rounded ${
+                viewMode === "pdf"
+                  ? "bg-indigo-600 text-white"
+                  : "bg-gray-200 text-gray-700"
+              }`}
+            >
+              PDF View
+            </button>
+          </div>
 
           <button
             onClick={toggleDebugInfo}
@@ -329,7 +427,7 @@ export default function PdfComparison({
         </div>
       )}
 
-      {viewMode === "text" ? (
+      {viewMode === "text" && (
         <div className="flex flex-1 overflow-hidden px-4">
           <div className="w-[49%] h-full overflow-hidden">
             <div className="bg-white shadow-sm rounded-lg p-4 h-full flex flex-col">
@@ -351,7 +449,7 @@ export default function PdfComparison({
               </div>
               <pre
                 ref={leftTextRef}
-                className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap overflow-auto flex-1 border border-gray-200 p-2 rounded bg-white dark:bg-gray-100"
+                className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap overflow-auto flex-1 border border-gray-200 p-2 rounded bg-white dark:bg-gray-100 tabular-nums"
               >
                 {leftText || "No text could be extracted from this PDF."}
               </pre>
@@ -378,14 +476,42 @@ export default function PdfComparison({
               </div>
               <pre
                 ref={rightTextRef}
-                className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap overflow-auto flex-1 border border-gray-200 p-2 rounded bg-white dark:bg-gray-100"
+                className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap overflow-auto flex-1 border border-gray-200 p-2 rounded bg-white dark:bg-gray-100 tabular-nums"
               >
                 {rightText || "No text could be extracted from this PDF."}
               </pre>
             </div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {viewMode === "diff" && (
+        <div className="flex-1 overflow-hidden px-4">
+          <div className="bg-white shadow-sm rounded-lg p-4 h-full flex flex-col">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Diff View: Changes between Amendments
+            </h3>
+            <div className="flex justify-between mb-2">
+              <span className="text-xs text-gray-500">
+                <span className="inline-block px-2 py-1 bg-red-100 mr-2">
+                  Removed
+                </span>
+                <span className="inline-block px-2 py-1 bg-green-100">
+                  Added
+                </span>
+              </span>
+            </div>
+            <div
+              ref={diffTextRef}
+              className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap overflow-auto flex-1 border border-gray-200 p-2 rounded bg-white dark:bg-gray-100 tabular-nums"
+            >
+              {renderDiff()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewMode === "pdf" && (
         <div className="flex flex-1 overflow-hidden px-4">
           <div className="w-[49%] h-full overflow-hidden">
             <PdfViewer url={leftAmendment.lcoLink} />
@@ -396,6 +522,29 @@ export default function PdfComparison({
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .diff-line {
+          display: flex;
+          padding: 2px 0;
+          line-height: 1.5;
+        }
+        .line-prefix {
+          width: 20px;
+          display: inline-block;
+          color: #586069;
+          user-select: none;
+        }
+        .diff-added {
+          background-color: #e6ffec;
+        }
+        .diff-removed {
+          background-color: #ffebe9;
+        }
+        .diff-unchanged {
+          background-color: transparent;
+        }
+      `}</style>
     </div>
   );
 }
