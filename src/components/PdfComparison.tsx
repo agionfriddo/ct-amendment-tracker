@@ -56,9 +56,11 @@ export default function PdfComparison({
     const dateLineRegex = /^[A-Z][a-z]+ \d{1,2}, \d{4}$/;
     const emptyLineWithNumberRegex = /^\s*\d+\s*$/;
     const headerFooterRegex = /^(File No\.|Calendar No\.|Substitute)/i;
+    const lineNumberStartRegex = /^\s*\d+\s+\S/; // Matches lines that start with a number followed by content
 
     // Flag to indicate we've reached the main content
     let mainContentStarted = false;
+    let lastLineWasNumber = false;
 
     // Process each line
     for (let i = 0; i < lines.length; i++) {
@@ -80,20 +82,23 @@ export default function PdfComparison({
         congresspersonRegex.test(line) ||
         districtReferenceRegex.test(line) ||
         dateLineRegex.test(line) ||
-        emptyLineWithNumberRegex.test(line) ||
         headerFooterRegex.test(line);
 
-      // If we find a line that starts with "Section" or contains "AN ACT", we've reached the main content
+      // Check if this line starts with a line number
+      const isLineNumberStart = lineNumberStartRegex.test(line);
+
+      // If we find a line that starts with "1" and contains content, we've reached the main content
+      // Or if we're already in main content
       if (
-        line.startsWith("Section") ||
-        line.includes("AN ACT") ||
-        line.includes("AMENDMENT")
+        !mainContentStarted &&
+        isLineNumberStart &&
+        line.trim().startsWith("1")
       ) {
         mainContentStarted = true;
       }
 
       // Add the line if it shouldn't be skipped and is part of the main content
-      if (!shouldSkip && (mainContentStarted || line.startsWith("Section"))) {
+      if (!shouldSkip && mainContentStarted) {
         // Normalize whitespace: replace multiple spaces with a single space
         // But preserve leading spaces for indentation
         const leadingSpacesMatch = line.match(/^(\s*)/);
