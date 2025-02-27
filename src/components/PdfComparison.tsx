@@ -9,6 +9,7 @@ import * as Diff from "diff";
 interface PdfComparisonProps {
   leftAmendment: Amendment;
   rightAmendment: Amendment;
+  filterNonEssentialText?: boolean;
 }
 
 // Type for view mode
@@ -17,9 +18,12 @@ type ViewMode = "text" | "pdf" | "diff";
 export default function PdfComparison({
   leftAmendment,
   rightAmendment,
+  filterNonEssentialText = true,
 }: PdfComparisonProps) {
   const [leftText, setLeftText] = useState<string>("");
   const [rightText, setRightText] = useState<string>("");
+  const [filteredLeftText, setFilteredLeftText] = useState<string>("");
+  const [filteredRightText, setFilteredRightText] = useState<string>("");
   const [diffResult, setDiffResult] = useState<Diff.Change[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,13 +31,96 @@ export default function PdfComparison({
   const [rightError, setRightError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("text");
   const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [showFiltered, setShowFiltered] = useState<boolean>(
+    filterNonEssentialText
+  );
 
   // Refs for the text containers
   const leftTextRef = useRef<HTMLPreElement>(null);
   const rightTextRef = useRef<HTMLPreElement>(null);
   const diffTextRef = useRef<HTMLDivElement>(null);
-  const [syncScrolling, setSyncScrolling] = useState(true);
-  const isScrolling = useRef(false);
+
+  // Filter out non-essential text (page numbers, rep info, etc.)
+  const filterText = (text: string): string => {
+    if (!text) return text;
+
+    // Split the text into lines
+    let lines = text.split("\n");
+    let filteredLines: string[] = [];
+
+    // Regular expressions to identify non-essential content
+    const pageNumberRegex = /^\d+\s+of\s+\d+$/;
+    const lcoNumberRegex = /^\d+\s+LCO\s+No\./i;
+    const congresspersonRegex = /^(REP\.|SEN\.)\s+[A-Z]+/i;
+    const districtReferenceRegex = /\d+(st|nd|rd|th)\s+Dist\.$/i;
+    const dateLineRegex = /^[A-Z][a-z]+ \d{1,2}, \d{4}$/;
+    const emptyLineWithNumberRegex = /^\s*\d+\s*$/;
+    const headerFooterRegex = /^(File No\.|Calendar No\.|Substitute)/i;
+
+    // Flag to indicate we've reached the main content
+    let mainContentStarted = false;
+
+    // Process each line
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // Skip empty lines
+      if (!line) {
+        // Only keep empty lines within the main content
+        if (mainContentStarted) {
+          filteredLines.push("");
+        }
+        continue;
+      }
+
+      // Check if this line should be skipped
+      const shouldSkip =
+        pageNumberRegex.test(line) ||
+        lcoNumberRegex.test(line) ||
+        congresspersonRegex.test(line) ||
+        districtReferenceRegex.test(line) ||
+        dateLineRegex.test(line) ||
+        emptyLineWithNumberRegex.test(line) ||
+        headerFooterRegex.test(line);
+
+      // If we find a line that starts with "Section" or contains "AN ACT", we've reached the main content
+      if (
+        line.startsWith("Section") ||
+        line.includes("AN ACT") ||
+        line.includes("AMENDMENT")
+      ) {
+        mainContentStarted = true;
+      }
+
+      // Add the line if it shouldn't be skipped and is part of the main content
+      if (!shouldSkip && (mainContentStarted || line.startsWith("Section"))) {
+        // Normalize whitespace: replace multiple spaces with a single space
+        // But preserve leading spaces for indentation
+        const leadingSpacesMatch = line.match(/^(\s*)/);
+        const leadingSpaces = leadingSpacesMatch ? leadingSpacesMatch[0] : "";
+        const normalizedLine = leadingSpaces + line.trim().replace(/\s+/g, " ");
+        filteredLines.push(normalizedLine);
+      }
+    }
+
+    // Additional processing to normalize whitespace in the entire text
+    let result = filteredLines.join("\n");
+
+    // Fix spacing around punctuation
+    result = result.replace(/\s+([.,;:)])/g, "$1");
+    result = result.replace(/([({])\s+/g, "$1");
+
+    // Ensure proper spacing after commas in lists
+    result = result.replace(/,(\w)/g, ", $1");
+
+    // Ensure consistent spacing after periods in sentences
+    result = result.replace(/\.(\w)/g, ". $1");
+
+    // Fix spacing for inclusive ranges
+    result = result.replace(/(\w+)\s*-\s*(\w+)/g, "$1-$2");
+
+    return result;
+  };
 
   // Extract text from PDFs using server-side API
   useEffect(() => {
@@ -61,6 +148,7 @@ export default function PdfComparison({
         if (leftTextResult.status === "fulfilled") {
           console.log("leftTextResult", leftTextResult.value.data);
           setLeftText(leftTextResult.value.data.text);
+          setFilteredLeftText(filterText(leftTextResult.value.data.text));
         } else {
           const reason = leftTextResult.reason;
           console.error("Error extracting text from left PDF:", reason);
@@ -88,6 +176,7 @@ export default function PdfComparison({
         // Handle right PDF result
         if (rightTextResult.status === "fulfilled") {
           setRightText(rightTextResult.value.data.text);
+          setFilteredRightText(filterText(rightTextResult.value.data.text));
         } else {
           const reason = rightTextResult.reason;
           console.error("Error extracting text from right PDF:", reason);
@@ -147,102 +236,30 @@ export default function PdfComparison({
 
   // Calculate diff when texts change
   useEffect(() => {
-    if (leftText && rightText) {
-      // Split the text into lines for line-by-line comparison
-      const leftLines = leftText.split("\n");
-      const rightLines = rightText.split("\n");
-
-      // Compute the diff
-      const diff = Diff.diffLines(leftText, rightText, {
-        ignoreWhitespace: false,
-      });
+    if (
+      (showFiltered ? filteredLeftText : leftText) &&
+      (showFiltered ? filteredRightText : rightText)
+    ) {
+      // Compute the diff based on filtered or unfiltered text
+      const diff = Diff.diffLines(
+        showFiltered ? filteredLeftText : leftText,
+        showFiltered ? filteredRightText : rightText,
+        {
+          ignoreWhitespace: false,
+        }
+      );
       setDiffResult(diff);
     }
-  }, [leftText, rightText]);
-
-  // Set up synchronized scrolling
-  useEffect(() => {
-    if (!syncScrolling || viewMode === "pdf") return;
-
-    const handleLeftScroll = () => {
-      if (
-        !syncScrolling ||
-        isScrolling.current ||
-        !leftTextRef.current ||
-        !rightTextRef.current
-      )
-        return;
-
-      isScrolling.current = true;
-      const scrollPercentage =
-        leftTextRef.current.scrollTop /
-        (leftTextRef.current.scrollHeight - leftTextRef.current.clientHeight);
-
-      const targetScrollTop =
-        scrollPercentage *
-        (rightTextRef.current.scrollHeight - rightTextRef.current.clientHeight);
-
-      rightTextRef.current.scrollTop = targetScrollTop;
-
-      setTimeout(() => {
-        isScrolling.current = false;
-      }, 50);
-    };
-
-    const handleRightScroll = () => {
-      if (
-        !syncScrolling ||
-        isScrolling.current ||
-        !leftTextRef.current ||
-        !rightTextRef.current
-      )
-        return;
-
-      isScrolling.current = true;
-      const scrollPercentage =
-        rightTextRef.current.scrollTop /
-        (rightTextRef.current.scrollHeight - rightTextRef.current.clientHeight);
-
-      const targetScrollTop =
-        scrollPercentage *
-        (leftTextRef.current.scrollHeight - leftTextRef.current.clientHeight);
-
-      leftTextRef.current.scrollTop = targetScrollTop;
-
-      setTimeout(() => {
-        isScrolling.current = false;
-      }, 50);
-    };
-
-    const leftTextElement = leftTextRef.current;
-    const rightTextElement = rightTextRef.current;
-
-    if (leftTextElement) {
-      leftTextElement.addEventListener("scroll", handleLeftScroll);
-    }
-
-    if (rightTextElement) {
-      rightTextElement.addEventListener("scroll", handleRightScroll);
-    }
-
-    return () => {
-      if (leftTextElement) {
-        leftTextElement.removeEventListener("scroll", handleLeftScroll);
-      }
-      if (rightTextElement) {
-        rightTextElement.removeEventListener("scroll", handleRightScroll);
-      }
-    };
-  }, [syncScrolling, leftText, rightText, viewMode]);
-
-  // Toggle synchronized scrolling
-  const toggleSyncScrolling = () => {
-    setSyncScrolling(!syncScrolling);
-  };
+  }, [leftText, rightText, filteredLeftText, filteredRightText, showFiltered]);
 
   // Toggle view mode
   const changeViewMode = (mode: ViewMode) => {
     setViewMode(mode);
+  };
+
+  // Toggle filtered text
+  const toggleFiltered = () => {
+    setShowFiltered(!showFiltered);
   };
 
   // Toggle debug information
@@ -338,16 +355,18 @@ export default function PdfComparison({
 
         <div className="flex flex-col items-center">
           {viewMode !== "pdf" && (
-            <button
-              onClick={toggleSyncScrolling}
-              className={`px-3 py-1 text-xs rounded mb-2 ${
-                syncScrolling
-                  ? "bg-indigo-600 text-white"
-                  : "bg-gray-200 text-gray-700"
-              }`}
-            >
-              {syncScrolling ? "Sync Scrolling: ON" : "Sync Scrolling: OFF"}
-            </button>
+            <div className="flex space-x-2 mb-2">
+              <button
+                onClick={toggleFiltered}
+                className={`px-3 py-1 text-xs rounded ${
+                  showFiltered
+                    ? "bg-indigo-600 text-white"
+                    : "bg-gray-200 text-gray-700"
+                }`}
+              >
+                {showFiltered ? "Show Body Only" : "Show Full Text"}
+              </button>
+            </div>
           )}
 
           <div className="flex space-x-2 mb-2">
@@ -433,7 +452,7 @@ export default function PdfComparison({
             <div className="bg-white shadow-sm rounded-lg p-4 h-full flex flex-col">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {leftAmendment.chamber === "senate" ? "Senate" : "House"}{" "}
-                Amendment Text
+                Amendment Text {showFiltered ? "(Body Only)" : "(Full Text)"}
               </h3>
               {leftError && (
                 <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
@@ -442,8 +461,10 @@ export default function PdfComparison({
               )}
               <div className="flex justify-between mb-2">
                 <span className="text-xs text-gray-500">
-                  {leftText
-                    ? `${leftText.length} characters extracted`
+                  {(showFiltered ? filteredLeftText : leftText)
+                    ? `${
+                        (showFiltered ? filteredLeftText : leftText).length
+                      } characters extracted`
                     : "No text extracted"}
                 </span>
               </div>
@@ -451,7 +472,8 @@ export default function PdfComparison({
                 ref={leftTextRef}
                 className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap overflow-auto flex-1 border border-gray-200 p-2 rounded bg-white dark:bg-gray-100 tabular-nums"
               >
-                {leftText || "No text could be extracted from this PDF."}
+                {(showFiltered ? filteredLeftText : leftText) ||
+                  "No text could be extracted from this PDF."}
               </pre>
             </div>
           </div>
@@ -460,7 +482,7 @@ export default function PdfComparison({
             <div className="bg-white shadow-sm rounded-lg p-4 h-full flex flex-col">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {rightAmendment.chamber === "senate" ? "Senate" : "House"}{" "}
-                Amendment Text
+                Amendment Text {showFiltered ? "(Body Only)" : "(Full Text)"}
               </h3>
               {rightError && (
                 <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
@@ -469,8 +491,10 @@ export default function PdfComparison({
               )}
               <div className="flex justify-between mb-2">
                 <span className="text-xs text-gray-500">
-                  {rightText
-                    ? `${rightText.length} characters extracted`
+                  {(showFiltered ? filteredRightText : rightText)
+                    ? `${
+                        (showFiltered ? filteredRightText : rightText).length
+                      } characters extracted`
                     : "No text extracted"}
                 </span>
               </div>
@@ -478,7 +502,8 @@ export default function PdfComparison({
                 ref={rightTextRef}
                 className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap overflow-auto flex-1 border border-gray-200 p-2 rounded bg-white dark:bg-gray-100 tabular-nums"
               >
-                {rightText || "No text could be extracted from this PDF."}
+                {(showFiltered ? filteredRightText : rightText) ||
+                  "No text could be extracted from this PDF."}
               </pre>
             </div>
           </div>
@@ -489,7 +514,8 @@ export default function PdfComparison({
         <div className="flex-1 overflow-hidden px-4">
           <div className="bg-white shadow-sm rounded-lg p-4 h-full flex flex-col">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Diff View: Changes between Amendments
+              Diff View: Changes between Amendments{" "}
+              {showFiltered ? "(Body Only)" : "(Full Text)"}
             </h3>
             <div className="flex justify-between mb-2">
               <span className="text-xs text-gray-500">
