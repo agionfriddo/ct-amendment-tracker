@@ -25,6 +25,18 @@ function improveTextFormatting(text: string): string {
   // Regular expression to identify line numbers at the end of lines
   const lineNumberRegex = /\s+(\d+)$/;
 
+  // Regular expression to identify district references (e.g., "86th Dist.")
+  const districtReferenceRegex = /\d+(st|nd|rd|th)\s+Dist\.$/i;
+
+  // Regular expression to identify partial district references (just the number)
+  const partialDistrictNumberRegex = /,\s*\d+$/;
+
+  // Regular expression to identify ordinal suffixes on their own line
+  const ordinalSuffixRegex = /^(st|nd|rd|th)$/i;
+
+  // Regular expression to identify "Dist." on its own line
+  const distLineRegex = /^Dist\.$/i;
+
   // Regular expression to identify line numbers at the beginning of lines
   const startingLineNumberRegex = /^(\d+)\s+/;
 
@@ -46,6 +58,26 @@ function improveTextFormatting(text: string): string {
   // Regular expression to identify amendment act titles
   const actTitleRegex = /"AN ACT\s+[^"\.]+\."/i;
 
+  // Regular expression to identify congressperson references
+  const congresspersonRegex = /^(REP\.|SEN\.)\s+[A-Z]+/i;
+
+  // First pass: Join split district references
+  for (let i = 0; i < lines.length - 2; i++) {
+    // Check for pattern: "SEN. NAME, 11" followed by "th" followed by "Dist."
+    if (
+      congresspersonRegex.test(lines[i]) &&
+      partialDistrictNumberRegex.test(lines[i]) &&
+      ordinalSuffixRegex.test(lines[i + 1]) &&
+      distLineRegex.test(lines[i + 2])
+    ) {
+      // Join the three lines
+      lines[i] = `${lines[i]}${lines[i + 1]} ${lines[i + 2]}`;
+      // Mark the next two lines to be skipped
+      lines[i + 1] = "";
+      lines[i + 2] = "";
+    }
+  }
+
   // Process each line
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
@@ -63,9 +95,15 @@ function improveTextFormatting(text: string): string {
       continue;
     }
 
-    // Check if the line has a line number at the end
+    // Check if this is a congressperson reference with district info
+    if (congresspersonRegex.test(line) || districtReferenceRegex.test(line)) {
+      formattedLines.push(line);
+      continue;
+    }
+
+    // Check if the line has a line number at the end (but not a district reference)
     const lineNumberMatch = line.match(lineNumberRegex);
-    if (lineNumberMatch) {
+    if (lineNumberMatch && !districtReferenceRegex.test(line)) {
       const lineNumber = lineNumberMatch[1];
       // Remove the line number from the end
       let textContent = line.replace(lineNumberRegex, "").trim();
