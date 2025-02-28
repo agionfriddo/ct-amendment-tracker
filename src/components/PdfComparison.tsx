@@ -301,14 +301,14 @@ export default function PdfComparison({
                     key={`${index}-${lineIndex}`}
                     className={`diff-line ${
                       part.added
-                        ? "bg-green-100"
+                        ? "bg-blue-100"
                         : part.removed
-                        ? "bg-red-100"
+                        ? "bg-amber-100"
                         : ""
                     }`}
                   >
                     <span className="line-prefix">
-                      {part.added ? "+ " : part.removed ? "- " : "  "}
+                      {part.added ? "R " : part.removed ? "L " : "  "}
                     </span>
                     <span>{line}</span>
                   </div>
@@ -525,11 +525,11 @@ export default function PdfComparison({
             </h3>
             <div className="flex justify-between mb-2">
               <span className="text-xs text-gray-500">
-                <span className="inline-block px-2 py-1 bg-red-100 mr-2">
-                  Removed
+                <span className="inline-block px-2 py-1 bg-amber-100 mr-2">
+                  Left Amendment Only
                 </span>
-                <span className="inline-block px-2 py-1 bg-green-100">
-                  Added
+                <span className="inline-block px-2 py-1 bg-blue-100">
+                  Right Amendment Only
                 </span>
               </span>
             </div>
@@ -568,10 +568,10 @@ export default function PdfComparison({
           user-select: none;
         }
         .diff-added {
-          background-color: #e6ffec;
+          background-color: #e6f3ff;
         }
         .diff-removed {
-          background-color: #ffebe9;
+          background-color: #fff8e6;
         }
         .diff-unchanged {
           background-color: transparent;
