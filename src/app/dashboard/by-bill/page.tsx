@@ -39,15 +39,12 @@ export default function ByBillPage() {
     }));
   }, [senateAmendments, houseAmendments]);
 
-  // Filter bill groups based on search term and chamber filter
+  // Filter bill groups based on search term
   const filteredBillGroups = useMemo(() => {
     let filtered = billGroups;
-
-    // Apply text search filter
     if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter((group) =>
-        group.billNumber.toLowerCase().includes(term)
+      filtered = billGroups.filter((group) =>
+        group.billNumber.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 

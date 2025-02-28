@@ -18,9 +18,9 @@ import pdfParse from "pdf-parse";
 function improveTextFormatting(text: string): string {
   if (!text) return text;
 
-  // Split the text into lines and trim whitespace
-  let lines = text.split("\n").map((line) => line.trim());
-  let formattedLines: string[] = [];
+  // Split text into lines and trim each line
+  const lines = text.split("\n").map((line) => line.trim());
+  const formattedLines: string[] = [];
 
   // Regular expression to identify line numbers at the end of lines
   const lineNumberRegex = /\s+(\d+)$/;
@@ -61,7 +61,7 @@ function improveTextFormatting(text: string): string {
   // Regular expression to identify congressperson references
   const congresspersonRegex = /^(REP\.|SEN\.)\s+[A-Z]+/i;
 
-  // Find the maximum line number to determine padding width
+  // Calculate the maximum width needed for line numbers
   let maxLineNumberWidth = 0;
   for (const line of lines) {
     const lineNumberMatch = line.match(lineNumberRegex);
@@ -94,7 +94,7 @@ function improveTextFormatting(text: string): string {
 
   // Process each line
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
+    const line = lines[i];
 
     // Skip empty lines
     if (!line) {
@@ -125,7 +125,7 @@ function improveTextFormatting(text: string): string {
     if (lineNumberMatch && !districtReferenceRegex.test(line)) {
       const lineNumber = lineNumberMatch[1];
       // Remove the line number from the end
-      let textContent = line.replace(lineNumberRegex, "").trim();
+      const textContent = line.replace(lineNumberRegex, "").trim();
 
       // Add the line number to the beginning with proper padding
       formattedLines.push(
@@ -193,34 +193,40 @@ function improveTextFormatting(text: string): string {
     }
   }
 
+  // Join the lines back together
+  const result = formattedLines.join("\n");
+
   // Additional processing for legislative document formatting
-  let result = formattedLines.join("\n");
+  let formattedResult = result;
 
   // Fix superscript formatting (e.g., "1st", "2nd", "3rd")
-  result = result.replace(/(\d+)(st|nd|rd|th)\s+Dist\./gi, "$1$2 Dist.");
+  formattedResult = formattedResult.replace(
+    /(\d+)(st|nd|rd|th)\s+Dist\./gi,
+    "$1$2 Dist."
+  );
 
   // Fix spacing around punctuation
-  result = result.replace(/\s+([.,;:)])/g, "$1");
-  result = result.replace(/([({])\s+/g, "$1");
+  formattedResult = formattedResult.replace(/\s+([.,;:)])/g, "$1");
+  formattedResult = formattedResult.replace(/([({])\s+/g, "$1");
 
   // Remove excessive blank lines (more than 2 consecutive)
-  result = result.replace(/\n{3,}/g, "\n\n");
+  formattedResult = formattedResult.replace(/\n{3,}/g, "\n\n");
 
   // Format quoted text blocks with proper indentation
-  result = result.replace(quotedTextRegex, (match, p1) => {
+  formattedResult = formattedResult.replace(quotedTextRegex, (match, p1) => {
     return `"${p1.trim()}"`;
   });
 
   // Format amendment titles in all caps
-  result = result.replace(/(AN ACT[^\.]+\.)/gi, (match) => {
+  formattedResult = formattedResult.replace(/(AN ACT[^\.]+\.)/gi, (match) => {
     return match.toUpperCase();
   });
 
   // Ensure consistent spacing after periods in sentences
-  result = result.replace(/\.(\w)/g, ". $1");
+  formattedResult = formattedResult.replace(/\.(\w)/g, ". $1");
 
   // Fix indentation for quoted text blocks
-  result = result.replace(/^"(.+)"$/gm, (match, p1) => {
+  formattedResult = formattedResult.replace(/^"(.+)"$/gm, (match, p1) => {
     if (p1.includes("\n")) {
       return `"${p1
         .split("\n")
@@ -231,15 +237,15 @@ function improveTextFormatting(text: string): string {
   });
 
   // Ensure proper spacing for subsections and numbered items
-  result = result.replace(/(\d+)\s*\)\s*/g, "$1) ");
+  formattedResult = formattedResult.replace(/(\d+)\s*\)\s*/g, "$1) ");
 
   // Fix spacing for inclusive ranges
-  result = result.replace(/(\w+)\s*-\s*(\w+)/g, "$1-$2");
+  formattedResult = formattedResult.replace(/(\w+)\s*-\s*(\w+)/g, "$1-$2");
 
   // Ensure proper spacing after commas in lists
-  result = result.replace(/,(\w)/g, ", $1");
+  formattedResult = formattedResult.replace(/,(\w)/g, ", $1");
 
-  return result;
+  return formattedResult;
 }
 
 export async function GET(request: NextRequest) {

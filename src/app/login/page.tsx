@@ -29,7 +29,8 @@ export default function LoginPage() {
         router.push("/dashboard");
         router.refresh();
       }
-    } catch (error) {
+    } catch (err) {
+      console.error("Login error:", err);
       setError("An error occurred. Please try again.");
     } finally {
       setLoading(false);

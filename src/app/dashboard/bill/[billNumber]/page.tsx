@@ -1,13 +1,12 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useAmendments } from "@/context/AmendmentsContext";
 import AmendmentList from "@/components/AmendmentList";
 import Link from "next/link";
 
 export default function BillDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const billNumber = params.billNumber as string;
   const { getAmendmentsByBill, loading, error } = useAmendments();
 

@@ -6,6 +6,7 @@ import {
   useState,
   useEffect,
   ReactNode,
+  useCallback,
 } from "react";
 import axios from "axios";
 import { useSession } from "next-auth/react";
@@ -46,13 +47,13 @@ interface AmendmentsProviderProps {
 }
 
 export function AmendmentsProvider({ children }: AmendmentsProviderProps) {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const [senateAmendments, setSenateAmendments] = useState<Amendment[]>([]);
   const [houseAmendments, setHouseAmendments] = useState<Amendment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAmendments = async () => {
+  const fetchAmendments = useCallback(async () => {
     // Don't fetch if not authenticated
     if (status !== "authenticated") {
       setLoading(false);
@@ -79,7 +80,7 @@ export function AmendmentsProvider({ children }: AmendmentsProviderProps) {
         setSenateAmendments([]);
       } else {
         setSenateAmendments(
-          senateResponse.data.map((item: any) => ({
+          senateResponse.data.map((item: Amendment) => ({
             ...item,
             chamber: "senate",
           }))
@@ -94,7 +95,10 @@ export function AmendmentsProvider({ children }: AmendmentsProviderProps) {
         setHouseAmendments([]);
       } else {
         setHouseAmendments(
-          houseResponse.data.map((item: any) => ({ ...item, chamber: "house" }))
+          houseResponse.data.map((item: Amendment) => ({
+            ...item,
+            chamber: "house",
+          }))
         );
       }
     } catch (err) {
@@ -103,7 +107,7 @@ export function AmendmentsProvider({ children }: AmendmentsProviderProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [status]);
 
   useEffect(() => {
     // Only fetch amendments when authentication status changes to authenticated
@@ -115,7 +119,7 @@ export function AmendmentsProvider({ children }: AmendmentsProviderProps) {
       setHouseAmendments([]);
       setLoading(false);
     }
-  }, [status]);
+  }, [status, fetchAmendments]);
 
   const refreshAmendments = async () => {
     await fetchAmendments();

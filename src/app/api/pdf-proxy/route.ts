@@ -37,13 +37,16 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Error proxying PDF:", error);
 
-    // Provide more detailed error information
     let errorMessage = "Failed to fetch PDF";
     let statusCode = 500;
 
-    if (axios.isAxiosError(error)) {
+    if (error instanceof Error) {
       errorMessage = error.message;
+    }
+
+    if (axios.isAxiosError(error)) {
       statusCode = error.response?.status || 500;
+      errorMessage = `Failed to fetch PDF: ${error.message}`;
     }
 
     return NextResponse.json(

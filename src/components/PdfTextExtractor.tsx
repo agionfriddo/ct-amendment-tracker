@@ -18,7 +18,9 @@ export default function PdfTextExtractor({
   const [filteredText, setFilteredText] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(
+    null
+  );
   const [showFiltered, setShowFiltered] = useState<boolean>(
     filterNonEssentialText
   );
@@ -31,8 +33,8 @@ export default function PdfTextExtractor({
     if (!text) return text;
 
     // Split the text into lines
-    let lines = text.split("\n");
-    let filteredLines: string[] = [];
+    const lines = text.split("\n");
+    const filteredLines: string[] = [];
 
     // Regular expressions to identify non-essential content
     const pageNumberRegex = /^\d+\s+of\s+\d+$/;
@@ -40,13 +42,11 @@ export default function PdfTextExtractor({
     const congresspersonRegex = /^(REP\.|SEN\.)\s+[A-Z]+/i;
     const districtReferenceRegex = /\d+(st|nd|rd|th)\s+Dist\.$/i;
     const dateLineRegex = /^[A-Z][a-z]+ \d{1,2}, \d{4}$/;
-    const emptyLineWithNumberRegex = /^\s*\d+\s*$/;
     const headerFooterRegex = /^(File No\.|Calendar No\.|Substitute)/i;
     const lineNumberStartRegex = /^\s*\d+\s+\S/; // Matches lines that start with a number followed by content
 
     // Flag to indicate we've reached the main content
     let mainContentStarted = false;
-    let lastLineWasNumber = false;
 
     // Process each line
     for (let i = 0; i < lines.length; i++) {

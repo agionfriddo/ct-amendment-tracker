@@ -7,8 +7,8 @@ import PdfViewer from "./PdfViewer";
 import * as Diff from "diff";
 
 interface PdfComparisonProps {
-  leftAmendment: Amendment;
-  rightAmendment: Amendment;
+  leftAmendment: Amendment | null;
+  rightAmendment: Amendment | null;
   filterNonEssentialText?: boolean;
 }
 
@@ -30,7 +30,9 @@ export default function PdfComparison({
   const [leftError, setLeftError] = useState<string | null>(null);
   const [rightError, setRightError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("text");
-  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(
+    null
+  );
   const [showFiltered, setShowFiltered] = useState<boolean>(
     filterNonEssentialText
   );
@@ -45,8 +47,8 @@ export default function PdfComparison({
     if (!text) return text;
 
     // Split the text into lines
-    let lines = text.split("\n");
-    let filteredLines: string[] = [];
+    const lines = text.split("\n");
+    const filteredLines: string[] = [];
 
     // Regular expressions to identify non-essential content
     const pageNumberRegex = /^\d+\s+of\s+\d+$/;
@@ -54,13 +56,11 @@ export default function PdfComparison({
     const congresspersonRegex = /^(REP\.|SEN\.)\s+[A-Z]+/i;
     const districtReferenceRegex = /\d+(st|nd|rd|th)\s+Dist\.$/i;
     const dateLineRegex = /^[A-Z][a-z]+ \d{1,2}, \d{4}$/;
-    const emptyLineWithNumberRegex = /^\s*\d+\s*$/;
     const headerFooterRegex = /^(File No\.|Calendar No\.|Substitute)/i;
     const lineNumberStartRegex = /^\s*\d+\s+\S/; // Matches lines that start with a number followed by content
 
     // Flag to indicate we've reached the main content
     let mainContentStarted = false;
-    let lastLineWasNumber = false;
 
     // Process each line
     for (let i = 0; i < lines.length; i++) {
@@ -136,12 +136,11 @@ export default function PdfComparison({
       setRightError(null);
 
       try {
-        // Extract text from both PDFs using our server-side API
         const leftUrl = `/api/pdf-text?url=${encodeURIComponent(
-          leftAmendment.lcoLink
+          leftAmendment?.lcoLink || ""
         )}`;
         const rightUrl = `/api/pdf-text?url=${encodeURIComponent(
-          rightAmendment.lcoLink
+          rightAmendment?.lcoLink || ""
         )}`;
 
         const [leftTextResult, rightTextResult] = await Promise.allSettled([
@@ -151,7 +150,6 @@ export default function PdfComparison({
 
         // Handle left PDF result
         if (leftTextResult.status === "fulfilled") {
-          console.log("leftTextResult", leftTextResult.value.data);
           setLeftText(leftTextResult.value.data.text);
           setFilteredLeftText(filterText(leftTextResult.value.data.text));
         } else {
@@ -164,15 +162,15 @@ export default function PdfComparison({
             errorMsg += ` (Status: ${
               reason.response?.status || "unknown"
             }, Message: ${reason.message})`;
-            setDebugInfo({
-              ...debugInfo,
+            setDebugInfo((prev) => ({
+              ...prev,
               leftError: {
                 message: reason.message,
                 code: reason.code,
                 status: reason.response?.status,
                 data: reason.response?.data,
               },
-            });
+            }));
           }
 
           setLeftError(errorMsg);
@@ -192,15 +190,15 @@ export default function PdfComparison({
             errorMsg += ` (Status: ${
               reason.response?.status || "unknown"
             }, Message: ${reason.message})`;
-            setDebugInfo({
-              ...debugInfo,
+            setDebugInfo((prev) => ({
+              ...prev,
               rightError: {
                 message: reason.message,
                 code: reason.code,
                 status: reason.response?.status,
                 data: reason.response?.data,
               },
-            });
+            }));
           }
 
           setRightError(errorMsg);
@@ -221,15 +219,15 @@ export default function PdfComparison({
           "An error occurred during the text extraction process. View the original documents instead."
         );
         if (axios.isAxiosError(err)) {
-          setDebugInfo({
-            ...debugInfo,
+          setDebugInfo((prev) => ({
+            ...prev,
             generalError: {
               message: err.message,
               code: err.code,
               status: err.response?.status,
               data: err.response?.data,
             },
-          });
+          }));
         }
       } finally {
         setLoading(false);
@@ -237,7 +235,7 @@ export default function PdfComparison({
     };
 
     fetchPdfText();
-  }, [leftAmendment.lcoLink, rightAmendment.lcoLink]);
+  }, [leftAmendment?.lcoLink, rightAmendment?.lcoLink]);
 
   // Calculate diff when texts change
   useEffect(() => {
@@ -342,14 +340,16 @@ export default function PdfComparison({
       <div className="flex justify-between items-center p-4 bg-gray-100 border-b">
         <div className="text-center flex-1">
           <h3 className="font-medium text-gray-900">
-            {leftAmendment.chamber === "senate" ? "Senate" : "House"} Amendment
+            {leftAmendment?.chamber === "senate" ? "Senate" : "House"} Amendment
           </h3>
-          <p className="text-sm text-gray-500">LCO {leftAmendment.lcoNumber}</p>
           <p className="text-sm text-gray-500">
-            {new Date(leftAmendment.date).toLocaleDateString()}
+            LCO {leftAmendment?.lcoNumber}
+          </p>
+          <p className="text-sm text-gray-500">
+            {new Date(leftAmendment?.date || "").toLocaleDateString()}
           </p>
           <a
-            href={leftAmendment.lcoLink}
+            href={leftAmendment?.lcoLink}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-indigo-600 hover:text-indigo-800"
@@ -423,16 +423,17 @@ export default function PdfComparison({
 
         <div className="text-center flex-1">
           <h3 className="font-medium text-gray-900">
-            {rightAmendment.chamber === "senate" ? "Senate" : "House"} Amendment
+            {rightAmendment?.chamber === "senate" ? "Senate" : "House"}{" "}
+            Amendment
           </h3>
           <p className="text-sm text-gray-500">
-            LCO {rightAmendment.lcoNumber}
+            LCO {rightAmendment?.lcoNumber}
           </p>
           <p className="text-sm text-gray-500">
-            {new Date(rightAmendment.date).toLocaleDateString()}
+            {new Date(rightAmendment?.date || "").toLocaleDateString()}
           </p>
           <a
-            href={rightAmendment.lcoLink}
+            href={rightAmendment?.lcoLink}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-indigo-600 hover:text-indigo-800"
@@ -456,7 +457,7 @@ export default function PdfComparison({
           <div className="w-[49%] h-full overflow-hidden">
             <div className="bg-white shadow-sm rounded-lg p-4 h-full flex flex-col">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {leftAmendment.chamber === "senate" ? "Senate" : "House"}{" "}
+                {leftAmendment?.chamber === "senate" ? "Senate" : "House"}{" "}
                 Amendment Text {showFiltered ? "(Body Only)" : "(Full Text)"}
               </h3>
               {leftError && (
@@ -486,7 +487,7 @@ export default function PdfComparison({
           <div className="w-[49%] h-full overflow-hidden">
             <div className="bg-white shadow-sm rounded-lg p-4 h-full flex flex-col">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {rightAmendment.chamber === "senate" ? "Senate" : "House"}{" "}
+                {rightAmendment?.chamber === "senate" ? "Senate" : "House"}{" "}
                 Amendment Text {showFiltered ? "(Body Only)" : "(Full Text)"}
               </h3>
               {rightError && (
@@ -542,7 +543,7 @@ export default function PdfComparison({
         </div>
       )}
 
-      {viewMode === "pdf" && (
+      {viewMode === "pdf" && leftAmendment && rightAmendment && (
         <div className="flex flex-1 overflow-hidden px-4">
           <div className="w-[49%] h-full overflow-hidden">
             <PdfViewer url={leftAmendment.lcoLink} />
