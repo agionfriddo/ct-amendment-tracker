@@ -13,7 +13,7 @@ interface PdfComparisonProps {
 }
 
 // Type for view mode
-type ViewMode = "text" | "pdf" | "diff";
+type ViewMode = "side-diff" | "combined-diff" | "pdf";
 
 export default function PdfComparison({
   leftAmendment,
@@ -29,7 +29,7 @@ export default function PdfComparison({
   const [error, setError] = useState<string | null>(null);
   const [leftError, setLeftError] = useState<string | null>(null);
   const [rightError, setRightError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("text");
+  const [viewMode, setViewMode] = useState<ViewMode>("side-diff");
   const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(
     null
   );
@@ -38,8 +38,8 @@ export default function PdfComparison({
   );
 
   // Refs for the text containers
-  const leftTextRef = useRef<HTMLPreElement>(null);
-  const rightTextRef = useRef<HTMLPreElement>(null);
+  const leftTextRef = useRef<HTMLDivElement>(null);
+  const rightTextRef = useRef<HTMLDivElement>(null);
   const diffTextRef = useRef<HTMLDivElement>(null);
 
   // Filter out non-essential text (page numbers, rep info, etc.)
@@ -321,6 +321,44 @@ export default function PdfComparison({
     );
   };
 
+  // Synchronize scrolling between left and right panels
+  useEffect(() => {
+    if (viewMode !== "side-diff") return;
+
+    const leftContainer = leftTextRef.current;
+    const rightContainer = rightTextRef.current;
+    if (!leftContainer || !rightContainer) return;
+
+    let isScrolling = false;
+
+    const syncScroll = (source: HTMLDivElement, target: HTMLDivElement) => {
+      if (!isScrolling) {
+        isScrolling = true;
+        target.scrollTop = source.scrollTop;
+        setTimeout(() => {
+          isScrolling = false;
+        }, 50);
+      }
+    };
+
+    const handleLeftScroll = () =>
+      leftContainer &&
+      rightContainer &&
+      syncScroll(leftContainer, rightContainer);
+    const handleRightScroll = () =>
+      rightContainer &&
+      leftContainer &&
+      syncScroll(rightContainer, leftContainer);
+
+    leftContainer.addEventListener("scroll", handleLeftScroll);
+    rightContainer.addEventListener("scroll", handleRightScroll);
+
+    return () => {
+      leftContainer.removeEventListener("scroll", handleLeftScroll);
+      rightContainer.removeEventListener("scroll", handleRightScroll);
+    };
+  }, [viewMode]);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -376,24 +414,24 @@ export default function PdfComparison({
 
           <div className="flex space-x-2 mb-2">
             <button
-              onClick={() => changeViewMode("text")}
+              onClick={() => changeViewMode("side-diff")}
               className={`px-3 py-1 text-xs rounded ${
-                viewMode === "text"
+                viewMode === "side-diff"
                   ? "bg-indigo-600 text-white"
                   : "bg-gray-200 text-gray-700"
               }`}
             >
-              Text View
+              Side-by-side Diff
             </button>
             <button
-              onClick={() => changeViewMode("diff")}
+              onClick={() => changeViewMode("combined-diff")}
               className={`px-3 py-1 text-xs rounded ${
-                viewMode === "diff"
+                viewMode === "combined-diff"
                   ? "bg-indigo-600 text-white"
                   : "bg-gray-200 text-gray-700"
               }`}
             >
-              Diff View
+              Combined Diff
             </button>
             <button
               onClick={() => changeViewMode("pdf")}
@@ -452,13 +490,13 @@ export default function PdfComparison({
         </div>
       )}
 
-      {viewMode === "text" && (
-        <div className="flex flex-1 overflow-hidden px-4">
-          <div className="w-[49%] h-full overflow-hidden">
-            <div className="bg-white shadow-sm rounded-lg p-4 h-full flex flex-col">
+      {viewMode === "side-diff" && (
+        <div className="flex flex-1 px-4 py-4 overflow-auto">
+          <div className="w-[49%]">
+            <div className="bg-white shadow-sm rounded-lg p-4">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {leftAmendment?.chamber === "senate" ? "Senate" : "House"}{" "}
-                Amendment Text {showFiltered ? "(Body Only)" : "(Full Text)"}
+                Amendment {showFiltered ? "(Body Only)" : "(Full Text)"}
               </h3>
               {leftError && (
                 <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
@@ -470,25 +508,34 @@ export default function PdfComparison({
                   {(showFiltered ? filteredLeftText : leftText)
                     ? `${
                         (showFiltered ? filteredLeftText : leftText).length
-                      } characters extracted`
+                      } characters`
                     : "No text extracted"}
                 </span>
               </div>
-              <pre
-                ref={leftTextRef}
-                className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap overflow-auto flex-1 border border-gray-200 p-2 rounded bg-white dark:bg-gray-100 tabular-nums"
-              >
-                {(showFiltered ? filteredLeftText : leftText) ||
-                  "No text could be extracted from this PDF."}
-              </pre>
+              <div className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap border border-gray-200 p-2 rounded bg-white dark:bg-gray-100 tabular-nums">
+                {diffResult.map((part, index) => {
+                  if (part.added) return null;
+                  const lines = part.value.split("\n");
+                  return (
+                    <div
+                      key={index}
+                      className={part.removed ? "bg-amber-100" : ""}
+                    >
+                      {lines.map((line, lineIndex) => (
+                        <div key={`${index}-${lineIndex}`}>{line || "\n"}</div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
           <div className="w-[2%]"></div>
-          <div className="w-[49%] h-full overflow-hidden">
-            <div className="bg-white shadow-sm rounded-lg p-4 h-full flex flex-col">
+          <div className="w-[49%]">
+            <div className="bg-white shadow-sm rounded-lg p-4">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {rightAmendment?.chamber === "senate" ? "Senate" : "House"}{" "}
-                Amendment Text {showFiltered ? "(Body Only)" : "(Full Text)"}
+                Amendment {showFiltered ? "(Body Only)" : "(Full Text)"}
               </h3>
               {rightError && (
                 <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
@@ -500,28 +547,36 @@ export default function PdfComparison({
                   {(showFiltered ? filteredRightText : rightText)
                     ? `${
                         (showFiltered ? filteredRightText : rightText).length
-                      } characters extracted`
+                      } characters`
                     : "No text extracted"}
                 </span>
               </div>
-              <pre
-                ref={rightTextRef}
-                className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap overflow-auto flex-1 border border-gray-200 p-2 rounded bg-white dark:bg-gray-100 tabular-nums"
-              >
-                {(showFiltered ? filteredRightText : rightText) ||
-                  "No text could be extracted from this PDF."}
-              </pre>
+              <div className="font-mono text-sm text-black dark:text-black whitespace-pre-wrap border border-gray-200 p-2 rounded bg-white dark:bg-gray-100 tabular-nums">
+                {diffResult.map((part, index) => {
+                  if (part.removed) return null;
+                  const lines = part.value.split("\n");
+                  return (
+                    <div
+                      key={index}
+                      className={part.added ? "bg-blue-100" : ""}
+                    >
+                      {lines.map((line, lineIndex) => (
+                        <div key={`${index}-${lineIndex}`}>{line || "\n"}</div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {viewMode === "diff" && (
+      {viewMode === "combined-diff" && (
         <div className="flex-1 overflow-hidden px-4">
           <div className="bg-white shadow-sm rounded-lg p-4 h-full flex flex-col">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Diff View: Changes between Amendments{" "}
-              {showFiltered ? "(Body Only)" : "(Full Text)"}
+              Combined Diff View {showFiltered ? "(Body Only)" : "(Full Text)"}
             </h3>
             <div className="flex justify-between mb-2">
               <span className="text-xs text-gray-500">
