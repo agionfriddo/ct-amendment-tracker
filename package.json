@@ -6,19 +6,28 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "scrape": "tsx scripts/scrapeBillText.ts",
+    "scrape:dry-run": "tsx scripts/scrapeBillText.ts",
+    "scrape:commit": "tsx scripts/scrapeBillText.ts --commit",
+    "migrate": "tsx scripts/migrateAmendments.ts",
+    "migrate:dry-run": "tsx scripts/migrateAmendments.ts",
+    "migrate:commit": "tsx scripts/migrateAmendments.ts --commit"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.751.0",
+    "@aws-sdk/client-dynamodb": "^3.758.0",
     "@aws-sdk/lib-dynamodb": "^3.751.0",
     "@react-pdf-viewer/core": "^3.12.0",
     "@react-pdf-viewer/default-layout": "^3.12.0",
     "@react-pdf-viewer/scroll-mode": "^3.12.0",
+    "@types/cheerio": "^0.22.35",
     "@types/diff": "^7.0.1",
     "axios": "^1.8.1",
     "buffer": "^6.0.3",
     "canvas": "^3.1.0",
+    "cheerio": "^1.0.0",
     "diff": "^7.0.0",
+    "dotenv": "^16.4.7",
     "next": "15.1.7",
     "next-auth": "^4.24.11",
     "pdf-parse": "^1.1.1",
@@ -36,6 +45,8 @@
     "eslint-config-next": "15.1.7",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.3",
     "typescript": "^5"
   }
 }
