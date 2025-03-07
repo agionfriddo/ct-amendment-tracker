@@ -21,7 +21,7 @@ export async function GET() {
 
     // Fetch data from DynamoDB
     const command = new ScanCommand({
-      TableName: "senate_amendments",
+      TableName: "2025-senate-amendments",
     });
 
     const result = await client.send(command);

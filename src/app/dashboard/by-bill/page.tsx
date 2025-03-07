@@ -3,13 +3,20 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useAmendments } from "@/context/AmendmentsContext";
+import { useBills } from "@/context/BillsContext";
 
 type SortField = "billNumber" | "latestDate";
 type SortDirection = "asc" | "desc";
 type ChamberFilter = "all" | "senate" | "house" | "both";
 
 export default function ByBillPage() {
-  const { senateAmendments, houseAmendments, loading, error } = useAmendments();
+  const {
+    senateAmendments,
+    houseAmendments,
+    loading: amendmentsLoading,
+    error: amendmentsError,
+  } = useAmendments();
+  const { bills, loading: billsLoading, error: billsError } = useBills();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<SortField>("latestDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -27,17 +34,23 @@ export default function ByBillPage() {
       return acc;
     }, {} as Record<string, typeof allAmendments>);
 
-    // Convert to array and sort by bill number
-    return Object.entries(groups).map(([billNumber, amendments]) => ({
-      billNumber,
-      amendments,
-      count: amendments.length,
-      chambers: [...new Set(amendments.map((a) => a.chamber))],
-      latestDate: new Date(
-        Math.max(...amendments.map((a) => new Date(a.date).getTime()))
-      ),
-    }));
-  }, [senateAmendments, houseAmendments]);
+    // Convert to array and combine with bill information
+    return bills.map((bill) => {
+      const amendments = groups[bill.billNumber] || [];
+      return {
+        ...bill,
+        amendments,
+        count: amendments.length,
+        chambers: [...new Set(amendments.map((a) => a.chamber))],
+        latestDate:
+          amendments.length > 0
+            ? new Date(
+                Math.max(...amendments.map((a) => new Date(a.date).getTime()))
+              )
+            : new Date(0), // Default date for bills without amendments
+      };
+    });
+  }, [senateAmendments, houseAmendments, bills]);
 
   // Filter bill groups based on search term
   const filteredBillGroups = useMemo(() => {
@@ -88,18 +101,18 @@ export default function ByBillPage() {
     }
   };
 
-  if (loading) {
+  if (billsLoading || amendmentsLoading) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading amendments...</p>
+          <p className="mt-4 text-gray-600">Loading bills and amendments...</p>
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (billsError || amendmentsError) {
     return (
       <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
         <div className="flex">
@@ -119,7 +132,9 @@ export default function ByBillPage() {
             </svg>
           </div>
           <div className="ml-3">
-            <p className="text-sm text-red-700">{error}</p>
+            <p className="text-sm text-red-700">
+              {billsError || amendmentsError}
+            </p>
           </div>
         </div>
       </div>
@@ -132,10 +147,10 @@ export default function ByBillPage() {
         <div className="md:flex md:items-center md:justify-between">
           <div className="flex-1 min-w-0">
             <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">
-              Amendments by Bill
+              Bills
             </h2>
             <p className="mt-1 text-sm text-gray-500">
-              View amendments grouped by bill number
+              View bills and their amendments
             </p>
           </div>
         </div>
@@ -245,7 +260,14 @@ export default function ByBillPage() {
                               clipRule="evenodd"
                             />
                           </svg>
-                          Last updated: {group.latestDate.toLocaleDateString()}
+                          {group.count > 0 ? (
+                            <>
+                              Last updated:{" "}
+                              {group.latestDate.toLocaleDateString()}
+                            </>
+                          ) : (
+                            <>No amendments yet</>
+                          )}
                         </div>
                         <div className="flex items-center text-sm text-gray-500">
                           <svg

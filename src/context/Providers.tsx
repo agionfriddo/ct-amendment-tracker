@@ -3,6 +3,7 @@
 import { ReactNode } from "react";
 import { AuthProvider } from "./AuthContext";
 import { AmendmentsProvider } from "./AmendmentsContext";
+import { BillsProvider } from "./BillsContext";
 
 interface ProvidersProps {
   children: ReactNode;
@@ -11,7 +12,9 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <AuthProvider>
-      <AmendmentsProvider>{children}</AmendmentsProvider>
+      <BillsProvider>
+        <AmendmentsProvider>{children}</AmendmentsProvider>
+      </BillsProvider>
     </AuthProvider>
   );
 }
