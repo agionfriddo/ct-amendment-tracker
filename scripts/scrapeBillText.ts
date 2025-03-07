@@ -92,24 +92,24 @@ async function writeBillToDynamoDB(
   commit: boolean = true
 ): Promise<boolean> {
   try {
-    // Check if bill already exists
-    const exists = await checkBillExists("bills", bill.billNumber);
+    // Check if bill already exists using the billNumber
+    const exists = await checkBillExists("2025-bills", bill.billNumber);
     if (exists) {
       console.log(
-        `Bill ${bill.billNumber} already exists in bills table, skipping...`
+        `Bill ${bill.billNumber} already exists in 2025-bills table, skipping...`
       );
       return true;
     }
 
     if (!commit) {
       console.log(
-        `[DRY RUN] Would write bill ${bill.billNumber} to bills table`
+        `[DRY RUN] Would write bill ${bill.billNumber} to 2025-bills table`
       );
       return true;
     }
 
     const command = new PutItemCommand({
-      TableName: "bills",
+      TableName: "2025-bills",
       Item: {
         billNumber: { S: bill.billNumber },
         pdfLinks: { SS: bill.pdfLinks },
@@ -124,12 +124,12 @@ async function writeBillToDynamoDB(
   } catch (error) {
     if (error instanceof ConditionalCheckFailedException) {
       console.log(
-        `Bill ${bill.billNumber} was just written to bills table by another process, skipping...`
+        `Bill ${bill.billNumber} was just written to 2025-bills table by another process, skipping...`
       );
       return true;
     }
     console.error(
-      `Error writing bill ${bill.billNumber} to bills table:`,
+      `Error writing bill ${bill.billNumber} to 2025-bills table:`,
       error
     );
     return false;
@@ -189,7 +189,7 @@ async function main(commit: boolean = false) {
 
   // Process House amendments
   console.log("Fetching House amendments...");
-  const houseAmendments = await fetchAmendments("house_amendments");
+  const houseAmendments = await fetchAmendments("2025-house-amendments");
   console.log(`Found ${houseAmendments.length} House amendments`);
 
   for (const amendment of houseAmendments) {
@@ -208,13 +208,13 @@ async function main(commit: boolean = false) {
         console.log(
           `${commit ? "Successfully stored" : "[DRY RUN] Would store"} bill ${
             amendment.billNumber
-          } in bills table`
+          } in 2025-bills table\n`
         );
       } else {
         console.log(
           `Failed to ${commit ? "store" : "validate"} bill ${
             amendment.billNumber
-          } in bills table`
+          } in 2025-bills table`
         );
       }
     } else {
@@ -225,7 +225,7 @@ async function main(commit: boolean = false) {
 
   // Process Senate amendments
   console.log("\nFetching Senate amendments...");
-  const senateAmendments = await fetchAmendments("senate_amendments");
+  const senateAmendments = await fetchAmendments("2025-senate-amendments");
   console.log(`Found ${senateAmendments.length} Senate amendments`);
 
   for (const amendment of senateAmendments) {
@@ -244,19 +244,19 @@ async function main(commit: boolean = false) {
         console.log(
           `${commit ? "Successfully stored" : "[DRY RUN] Would store"} bill ${
             amendment.billNumber
-          } in bills table`
+          } in 2025-bills table`
         );
       } else {
         console.log(
           `Failed to ${commit ? "store" : "validate"} bill ${
             amendment.billNumber
-          } in bills table`
+          } in 2025-bills table`
         );
       }
     } else {
       console.log(`Failed to scrape text for bill ${amendment.billNumber}`);
     }
-    await delay(2000);
+    await delay(500);
   }
 
   console.log("\nScraping process completed!");

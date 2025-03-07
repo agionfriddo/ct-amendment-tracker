@@ -2,7 +2,6 @@ import {
   DynamoDBClient,
   ScanCommand,
   PutItemCommand,
-  DeleteItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import * as dotenv from "dotenv";
 
@@ -25,11 +24,6 @@ interface Amendment {
   billLink: string;
   lcoNumber: string;
   calNumber: string;
-}
-
-function generateId(date: string, lcoNumber: string): string {
-  const year = new Date(date).getFullYear();
-  return `${year}-${lcoNumber}`;
 }
 
 async function fetchAmendments(tableName: string): Promise<Amendment[]> {
@@ -56,28 +50,19 @@ async function fetchAmendments(tableName: string): Promise<Amendment[]> {
   }
 }
 
-async function migrateAmendment(
+async function writeAmendment(
   amendment: Amendment,
-  targetTable: string,
-  commit: boolean
+  tableName: string,
+  commit: boolean = false
 ): Promise<boolean> {
+  if (!commit) {
+    return true;
+  }
+
   try {
-    const id = generateId(amendment.date, amendment.lcoNumber);
-
-    if (!commit) {
-      console.log(`[DRY RUN] Would migrate amendment ${id} to ${targetTable}`);
-      console.log("Data:", {
-        id,
-        ...amendment,
-      });
-      return true;
-    }
-
-    // Write to new table
-    const putCommand = new PutItemCommand({
-      TableName: targetTable,
+    const command = new PutItemCommand({
+      TableName: tableName,
       Item: {
-        id: { S: id },
         billNumber: { S: amendment.billNumber },
         date: { S: amendment.date },
         lcoLink: { S: amendment.lcoLink },
@@ -87,43 +72,87 @@ async function migrateAmendment(
       },
     });
 
-    await client.send(putCommand);
-    console.log(`Successfully migrated amendment ${id} to ${targetTable}`);
+    await client.send(command);
     return true;
   } catch (error) {
-    console.error(`Error migrating amendment ${amendment.billNumber}:`, error);
+    console.error(
+      `Error writing amendment ${amendment.billNumber} to ${tableName}:`,
+      error
+    );
     return false;
   }
 }
 
 async function main(commit: boolean = false) {
   if (!commit) {
-    console.log("Running in dry-run mode. No changes will be made.");
+    console.log("Running in dry-run mode. No writes will be performed.");
+  }
+
+  const senateTableName = "2025-senate-amendments";
+  const houseTableName = "2025-house-amendments";
+
+  // Fetch amendments
+  console.log("Fetching Senate amendments...");
+  const senateAmendments = await fetchAmendments("senate_amendments");
+  console.log(`Found ${senateAmendments.length} total Senate amendments`);
+
+  console.log("Fetching House amendments...");
+  const houseAmendments = await fetchAmendments("house_amendments");
+  console.log(`Found ${houseAmendments.length} total House amendments`);
+
+  // Filter for 2025 amendments
+  const senate2025 = senateAmendments.filter((amendment) =>
+    amendment.date.endsWith("2025")
+  );
+  const house2025 = houseAmendments.filter((amendment) =>
+    amendment.date.endsWith("2025")
+  );
+
+  console.log(`Found ${senate2025.length} Senate amendments from 2025`);
+  console.log(`Found ${house2025.length} House amendments from 2025`);
+
+  // Migrate Senate amendments
+  console.log("\nMigrating Senate amendments...");
+  for (const amendment of senate2025) {
+    const success = await writeAmendment(amendment, senateTableName, commit);
+    if (success) {
+      console.log(
+        `${commit ? "Migrated" : "[DRY RUN] Would migrate"} Senate amendment ${
+          amendment.lcoNumber
+        }`
+      );
+    } else {
+      console.log(`Failed to migrate Senate amendment ${amendment.lcoNumber}`);
+    }
   }
 
   // Migrate House amendments
   console.log("\nMigrating House amendments...");
-  const houseAmendments = await fetchAmendments("house_amendments");
-  console.log(`Found ${houseAmendments.length} House amendments to migrate`);
-
-  for (const amendment of houseAmendments) {
-    await migrateAmendment(amendment, "house-amendments", commit);
-  }
-
-  // Migrate Senate amendments
-  console.log("\nMigrating Senate amendments...");
-  const senateAmendments = await fetchAmendments("senate_amendments");
-  console.log(`Found ${senateAmendments.length} Senate amendments to migrate`);
-
-  for (const amendment of senateAmendments) {
-    await migrateAmendment(amendment, "senate-amendments", commit);
+  for (const amendment of house2025) {
+    const success = await writeAmendment(amendment, houseTableName, commit);
+    if (success) {
+      console.log(
+        `${commit ? "Migrated" : "[DRY RUN] Would migrate"} House amendment ${
+          amendment.lcoNumber
+        }`
+      );
+    } else {
+      console.log(`Failed to migrate House amendment ${amendment.lcoNumber}`);
+    }
   }
 
   console.log("\nMigration completed!");
+  console.log(
+    `Total amendments migrated: ${senate2025.length + house2025.length}`
+  );
+  console.log(`- Senate amendments: ${senate2025.length}`);
+  console.log(`- House amendments: ${house2025.length}`);
 }
 
 // Run the script
-main(process.argv.includes("--commit")).catch((error) => {
-  console.error("Script failed:", error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main(process.argv.includes("--commit")).catch((error) => {
+    console.error("Script failed:", error);
+    process.exit(1);
+  });
+}

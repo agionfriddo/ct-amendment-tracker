@@ -7,12 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "scrape": "tsx scripts/scrapeBillText.ts",
-    "scrape:dry-run": "tsx scripts/scrapeBillText.ts",
-    "scrape:commit": "tsx scripts/scrapeBillText.ts --commit",
-    "migrate": "tsx scripts/migrateAmendments.ts",
-    "migrate:dry-run": "tsx scripts/migrateAmendments.ts",
-    "migrate:commit": "tsx scripts/migrateAmendments.ts --commit"
+    "scrape-bills": "tsx scripts/scrapeBillText.ts",
+    "migrate-amendments": "tsx scripts/migrateAmendments.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.758.0",
