@@ -7,8 +7,12 @@ import PdfViewer from "./PdfViewer";
 import * as Diff from "diff";
 
 interface PdfComparisonProps {
-  leftAmendment: Amendment | null;
-  rightAmendment: Amendment | null;
+  leftPdfUrl?: string;
+  rightPdfUrl?: string;
+  leftLabel?: string;
+  rightLabel?: string;
+  leftAmendment?: Amendment | null;
+  rightAmendment?: Amendment | null;
   filterNonEssentialText?: boolean;
 }
 
@@ -16,6 +20,10 @@ interface PdfComparisonProps {
 type ViewMode = "side-diff" | "combined-diff" | "pdf";
 
 export default function PdfComparison({
+  leftPdfUrl,
+  rightPdfUrl,
+  leftLabel,
+  rightLabel,
   leftAmendment,
   rightAmendment,
   filterNonEssentialText = true,
@@ -33,14 +41,15 @@ export default function PdfComparison({
   const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(
     null
   );
-  const [showFiltered, setShowFiltered] = useState<boolean>(
-    filterNonEssentialText
-  );
+  const [showFiltered, setShowFiltered] = useState<boolean>(false);
 
   // Refs for the text containers
   const leftTextRef = useRef<HTMLDivElement>(null);
   const rightTextRef = useRef<HTMLDivElement>(null);
   const diffTextRef = useRef<HTMLDivElement>(null);
+
+  const leftIframeRef = useRef<HTMLIFrameElement>(null);
+  const rightIframeRef = useRef<HTMLIFrameElement>(null);
 
   // Filter out non-essential text (page numbers, rep info, etc.)
   const filterText = (text: string): string => {
@@ -136,17 +145,37 @@ export default function PdfComparison({
       setRightError(null);
 
       try {
-        const leftUrl = `/api/pdf-text?url=${encodeURIComponent(
-          leftAmendment?.lcoLink || ""
-        )}`;
-        const rightUrl = `/api/pdf-text?url=${encodeURIComponent(
-          rightAmendment?.lcoLink || ""
-        )}`;
+        const leftUrlToFetch = leftPdfUrl || leftAmendment?.lcoLink;
+        const rightUrlToFetch = rightPdfUrl || rightAmendment?.lcoLink;
 
-        const [leftTextResult, rightTextResult] = await Promise.allSettled([
-          axios.get(leftUrl),
-          axios.get(rightUrl),
-        ]);
+        if (!leftUrlToFetch && !rightUrlToFetch) {
+          setLoading(false);
+          return;
+        }
+
+        const requests = [];
+
+        if (leftUrlToFetch) {
+          const leftUrl = `/api/pdf-text?url=${encodeURIComponent(
+            leftUrlToFetch
+          )}`;
+          requests.push(axios.get(leftUrl));
+        } else {
+          requests.push(Promise.resolve({ data: { text: "" } }));
+        }
+
+        if (rightUrlToFetch) {
+          const rightUrl = `/api/pdf-text?url=${encodeURIComponent(
+            rightUrlToFetch
+          )}`;
+          requests.push(axios.get(rightUrl));
+        } else {
+          requests.push(Promise.resolve({ data: { text: "" } }));
+        }
+
+        const [leftTextResult, rightTextResult] = await Promise.allSettled(
+          requests
+        );
 
         // Handle left PDF result
         if (leftTextResult.status === "fulfilled") {
@@ -235,7 +264,12 @@ export default function PdfComparison({
     };
 
     fetchPdfText();
-  }, [leftAmendment?.lcoLink, rightAmendment?.lcoLink]);
+  }, [
+    leftPdfUrl,
+    rightPdfUrl,
+    leftAmendment?.lcoLink,
+    rightAmendment?.lcoLink,
+  ]);
 
   // Calculate diff when texts change
   useEffect(() => {
@@ -359,6 +393,61 @@ export default function PdfComparison({
     };
   }, [viewMode]);
 
+  useEffect(() => {
+    // Sync scroll between the two PDFs
+    const leftIframe = leftIframeRef.current;
+    const rightIframe = rightIframeRef.current;
+
+    if (!leftIframe || !rightIframe) return;
+
+    const handleScroll = (e: Event) => {
+      const source = e.target as HTMLIFrameElement;
+      const target = source === leftIframe ? rightIframe : leftIframe;
+
+      if (!source.contentWindow || !target.contentWindow) return;
+
+      const scrollRatio =
+        source.contentWindow.scrollY /
+        (source.contentWindow.document.documentElement.scrollHeight -
+          source.contentWindow.innerHeight);
+
+      target.contentWindow.scrollTo(
+        0,
+        scrollRatio *
+          (target.contentWindow.document.documentElement.scrollHeight -
+            target.contentWindow.innerHeight)
+      );
+    };
+
+    leftIframe.addEventListener("scroll", handleScroll);
+    rightIframe.addEventListener("scroll", handleScroll);
+
+    return () => {
+      leftIframe.removeEventListener("scroll", handleScroll);
+      rightIframe.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  const getDisplayUrl = (amendment: Amendment | null | undefined) => {
+    return amendment?.lcoLink || "";
+  };
+
+  const getDisplayLabel = (
+    label: string | undefined,
+    amendment: Amendment | null | undefined
+  ) => {
+    if (label) return label;
+    if (!amendment) return "No amendment selected";
+    return `${amendment.chamber === "senate" ? "Senate" : "House"} - LCO ${
+      amendment.lcoNumber
+    }`;
+  };
+
+  const leftUrl = leftPdfUrl || getDisplayUrl(leftAmendment);
+  const rightUrl = rightPdfUrl || getDisplayUrl(rightAmendment);
+  const leftDisplayLabel = getDisplayLabel(leftLabel, leftAmendment);
+  const rightDisplayLabel = getDisplayLabel(rightLabel, rightAmendment);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -377,17 +466,9 @@ export default function PdfComparison({
     <div className="flex flex-col h-screen">
       <div className="flex justify-between items-center p-4 bg-gray-100 border-b">
         <div className="text-center flex-1">
-          <h3 className="font-medium text-gray-900">
-            {leftAmendment?.chamber === "senate" ? "Senate" : "House"} Amendment
-          </h3>
-          <p className="text-sm text-gray-500">
-            LCO {leftAmendment?.lcoNumber}
-          </p>
-          <p className="text-sm text-gray-500">
-            {new Date(leftAmendment?.date || "").toLocaleDateString()}
-          </p>
+          <h3 className="font-medium text-gray-900">{leftDisplayLabel}</h3>
           <a
-            href={leftAmendment?.lcoLink}
+            href={leftUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-indigo-600 hover:text-indigo-800"
@@ -460,18 +541,9 @@ export default function PdfComparison({
         </div>
 
         <div className="text-center flex-1">
-          <h3 className="font-medium text-gray-900">
-            {rightAmendment?.chamber === "senate" ? "Senate" : "House"}{" "}
-            Amendment
-          </h3>
-          <p className="text-sm text-gray-500">
-            LCO {rightAmendment?.lcoNumber}
-          </p>
-          <p className="text-sm text-gray-500">
-            {new Date(rightAmendment?.date || "").toLocaleDateString()}
-          </p>
+          <h3 className="font-medium text-gray-900">{rightDisplayLabel}</h3>
           <a
-            href={rightAmendment?.lcoLink}
+            href={rightUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-indigo-600 hover:text-indigo-800"
@@ -598,14 +670,22 @@ export default function PdfComparison({
         </div>
       )}
 
-      {viewMode === "pdf" && leftAmendment && rightAmendment && (
+      {viewMode === "pdf" && (
         <div className="flex flex-1 overflow-hidden px-4">
           <div className="w-[49%] h-full overflow-hidden">
-            <PdfViewer url={leftAmendment.lcoLink} />
+            <iframe
+              ref={leftIframeRef}
+              src={leftUrl}
+              className="w-full h-full"
+            />
           </div>
           <div className="w-[2%]"></div>
           <div className="w-[49%] h-full overflow-hidden">
-            <PdfViewer url={rightAmendment.lcoLink} />
+            <iframe
+              ref={rightIframeRef}
+              src={rightUrl}
+              className="w-full h-full"
+            />
           </div>
         </div>
       )}

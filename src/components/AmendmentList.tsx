@@ -244,6 +244,12 @@ export default function AmendmentList({
                     >
                       View Details
                     </Link>
+                    <Link
+                      href={`/dashboard/bill/${amendment.billNumber}/compare-amendment-to-bill?lco=${amendment.lcoNumber}`}
+                      className="text-indigo-600 hover:text-indigo-900 mr-4"
+                    >
+                      Compare to Bill
+                    </Link>
                     <a
                       href={amendment.lcoLink}
                       target="_blank"

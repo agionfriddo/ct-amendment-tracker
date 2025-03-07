@@ -279,7 +279,6 @@ export async function GET(request: NextRequest) {
     // Extract text from PDF using pdf-parse
     const data = await pdfParse(pdfBuffer);
     const extractedText = data.text;
-    console.log("Extracted text:", extractedText);
 
     // Apply formatting improvements
     const formattedText = improveTextFormatting(extractedText);

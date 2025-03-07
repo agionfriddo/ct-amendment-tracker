@@ -74,6 +74,9 @@ export default function BillDetailPage() {
     );
   }
 
+  const hasBillPdf = bill.pdfLinks.length > 0;
+  const hasAmendments = amendments.length > 0;
+
   return (
     <div className="space-y-6">
       <div className="bg-white shadow px-4 py-5 sm:rounded-lg sm:p-6">
@@ -87,14 +90,6 @@ export default function BillDetailPage() {
             </p>
           </div>
           <div className="mt-4 flex-shrink-0 flex md:mt-0 md:ml-4 space-x-3">
-            {amendments.length >= 2 && (
-              <Link
-                href={`/dashboard/bill/${billNumber}/compare`}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                Compare Amendments
-              </Link>
-            )}
             <a
               href={bill.billLink}
               target="_blank"
@@ -103,7 +98,7 @@ export default function BillDetailPage() {
             >
               View Bill
             </a>
-            {bill.pdfLinks.length > 0 && (
+            {hasBillPdf && (
               <div className="relative inline-block text-left">
                 <a
                   href={bill.pdfLinks[0]}
