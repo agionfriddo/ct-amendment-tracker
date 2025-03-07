@@ -463,7 +463,7 @@ export default function PdfComparison({
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div>
       <div className="flex justify-between items-center p-4 bg-gray-100 border-b">
         <div className="text-center flex-1">
           <h3 className="font-medium text-gray-900">{leftDisplayLabel}</h3>
@@ -566,10 +566,6 @@ export default function PdfComparison({
         <div className="flex flex-1 px-4 py-4 overflow-auto">
           <div className="w-[49%]">
             <div className="bg-white shadow-sm rounded-lg p-4">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {leftAmendment?.chamber === "senate" ? "Senate" : "House"}{" "}
-                Amendment {showFiltered ? "(Body Only)" : "(Full Text)"}
-              </h3>
               {leftError && (
                 <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
                   <p className="text-sm text-red-700">{leftError}</p>
@@ -605,10 +601,6 @@ export default function PdfComparison({
           <div className="w-[2%]"></div>
           <div className="w-[49%]">
             <div className="bg-white shadow-sm rounded-lg p-4">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {rightAmendment?.chamber === "senate" ? "Senate" : "House"}{" "}
-                Amendment {showFiltered ? "(Body Only)" : "(Full Text)"}
-              </h3>
               {rightError && (
                 <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
                   <p className="text-sm text-red-700">{rightError}</p>
@@ -647,9 +639,6 @@ export default function PdfComparison({
       {viewMode === "combined-diff" && (
         <div className="flex-1 overflow-hidden px-4">
           <div className="bg-white shadow-sm rounded-lg p-4 h-full flex flex-col">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Combined Diff View {showFiltered ? "(Body Only)" : "(Full Text)"}
-            </h3>
             <div className="flex justify-between mb-2">
               <span className="text-xs text-gray-500">
                 <span className="inline-block px-2 py-1 bg-amber-100 mr-2">
@@ -671,20 +660,20 @@ export default function PdfComparison({
       )}
 
       {viewMode === "pdf" && (
-        <div className="flex flex-1 overflow-hidden px-4">
-          <div className="w-[49%] h-full overflow-hidden">
+        <div className="flex px-4 py-4">
+          <div className="w-[49%]">
             <iframe
               ref={leftIframeRef}
               src={leftUrl}
-              className="w-full h-full"
+              className="w-full h-[800px]"
             />
           </div>
           <div className="w-[2%]"></div>
-          <div className="w-[49%] h-full overflow-hidden">
+          <div className="w-[49%]">
             <iframe
               ref={rightIframeRef}
               src={rightUrl}
-              className="w-full h-full"
+              className="w-full h-[800px]"
             />
           </div>
         </div>

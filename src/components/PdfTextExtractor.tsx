@@ -236,9 +236,6 @@ export default function PdfTextExtractor({
 
       <div className="w-full overflow-hidden">
         <div className="bg-white shadow-sm rounded-lg p-4 flex flex-col">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            Extracted Text {showFiltered ? "(Body Only)" : "(Full Text)"}
-          </h3>
           {error && (
             <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
               <p className="text-sm text-red-700">{error}</p>

@@ -174,7 +174,7 @@ export default function CompareAmendmentsPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div>
       <div className="bg-white shadow px-4 py-3 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-medium text-gray-900">
