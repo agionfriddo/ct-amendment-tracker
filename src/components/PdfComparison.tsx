@@ -27,8 +27,6 @@ export default function PdfComparison({
 }: PdfComparisonProps) {
   const [leftText, setLeftText] = useState<string>("");
   const [rightText, setRightText] = useState<string>("");
-  const [filteredLeftText, setFilteredLeftText] = useState<string>("");
-  const [filteredRightText, setFilteredRightText] = useState<string>("");
   const [diffResult, setDiffResult] = useState<Diff.Change[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +36,6 @@ export default function PdfComparison({
   const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(
     null
   );
-  const [showFiltered, setShowFiltered] = useState<boolean>(false);
 
   // Refs for the text containers
   const leftTextRef = useRef<HTMLDivElement>(null);
@@ -47,91 +44,6 @@ export default function PdfComparison({
 
   const leftIframeRef = useRef<HTMLIFrameElement>(null);
   const rightIframeRef = useRef<HTMLIFrameElement>(null);
-
-  // Filter out non-essential text (page numbers, rep info, etc.)
-  const filterText = (text: string): string => {
-    if (!text) return text;
-
-    // Split the text into lines
-    const lines = text.split("\n");
-    const filteredLines: string[] = [];
-
-    // Regular expressions to identify non-essential content
-    const pageNumberRegex = /^\d+\s+of\s+\d+$/;
-    const lcoNumberRegex = /^\d+\s+LCO\s+No\./i;
-    const congresspersonRegex = /^(REP\.|SEN\.)\s+[A-Z]+/i;
-    const districtReferenceRegex = /\d+(st|nd|rd|th)\s+Dist\.$/i;
-    const dateLineRegex = /^[A-Z][a-z]+ \d{1,2}, \d{4}$/;
-    const headerFooterRegex = /^(File No\.|Calendar No\.|Substitute)/i;
-    const lineNumberStartRegex = /^\s*\d+\s+\S/; // Matches lines that start with a number followed by content
-
-    // Flag to indicate we've reached the main content
-    let mainContentStarted = false;
-
-    // Process each line
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-
-      // Skip empty lines
-      if (!line) {
-        // Only keep empty lines within the main content
-        if (mainContentStarted) {
-          filteredLines.push("");
-        }
-        continue;
-      }
-
-      // Check if this line should be skipped
-      const shouldSkip =
-        pageNumberRegex.test(line) ||
-        lcoNumberRegex.test(line) ||
-        congresspersonRegex.test(line) ||
-        districtReferenceRegex.test(line) ||
-        dateLineRegex.test(line) ||
-        headerFooterRegex.test(line);
-
-      // Check if this line starts with a line number
-      const isLineNumberStart = lineNumberStartRegex.test(line);
-
-      // If we find a line that starts with "1" and contains content, we've reached the main content
-      // Or if we're already in main content
-      if (
-        !mainContentStarted &&
-        isLineNumberStart &&
-        line.trim().startsWith("1")
-      ) {
-        mainContentStarted = true;
-      }
-
-      // Add the line if it shouldn't be skipped and is part of the main content
-      if (!shouldSkip && mainContentStarted) {
-        // Normalize whitespace: replace multiple spaces with a single space
-        // But preserve leading spaces for indentation
-        const leadingSpacesMatch = line.match(/^(\s*)/);
-        const leadingSpaces = leadingSpacesMatch ? leadingSpacesMatch[0] : "";
-        const normalizedLine = leadingSpaces + line.trim().replace(/\s+/g, " ");
-        filteredLines.push(normalizedLine);
-      }
-    }
-
-    // Additional processing to normalize whitespace in the entire text
-    let result = filteredLines.join("\n");
-
-    // Fix spacing around punctuation
-    result = result.replace(/\s+([.,;:)])/g, "$1");
-    result = result.replace(/([({])\s+/g, "$1");
-
-    // Ensure proper spacing after commas in lists
-    result = result.replace(/,(\w)/g, ", $1");
-
-    // Ensure consistent spacing after periods in sentences
-    result = result.replace(/\.(\w)/g, ". $1");
-
-    // Fix spacing for inclusive ranges
-    result = result.replace(/(\w+)\s*-\s*(\w+)/g, "$1-$2");
-
-    return result;
-  };
 
   // Extract text from PDFs using server-side API
   useEffect(() => {
@@ -177,7 +89,6 @@ export default function PdfComparison({
         // Handle left PDF result
         if (leftTextResult.status === "fulfilled") {
           setLeftText(leftTextResult.value.data.text);
-          setFilteredLeftText(filterText(leftTextResult.value.data.text));
         } else {
           const reason = leftTextResult.reason;
           console.error("Error extracting text from left PDF:", reason);
@@ -205,7 +116,6 @@ export default function PdfComparison({
         // Handle right PDF result
         if (rightTextResult.status === "fulfilled") {
           setRightText(rightTextResult.value.data.text);
-          setFilteredRightText(filterText(rightTextResult.value.data.text));
         } else {
           const reason = rightTextResult.reason;
           console.error("Error extracting text from right PDF:", reason);
@@ -270,30 +180,17 @@ export default function PdfComparison({
 
   // Calculate diff when texts change
   useEffect(() => {
-    if (
-      (showFiltered ? filteredLeftText : leftText) &&
-      (showFiltered ? filteredRightText : rightText)
-    ) {
-      // Compute the diff based on filtered or unfiltered text
-      const diff = Diff.diffLines(
-        showFiltered ? filteredLeftText : leftText,
-        showFiltered ? filteredRightText : rightText,
-        {
-          ignoreWhitespace: false,
-        }
-      );
+    if (leftText && rightText) {
+      const diff = Diff.diffLines(leftText, rightText, {
+        ignoreWhitespace: false,
+      });
       setDiffResult(diff);
     }
-  }, [leftText, rightText, filteredLeftText, filteredRightText, showFiltered]);
+  }, [leftText, rightText]);
 
   // Toggle view mode
   const changeViewMode = (mode: ViewMode) => {
     setViewMode(mode);
-  };
-
-  // Toggle filtered text
-  const toggleFiltered = () => {
-    setShowFiltered(!showFiltered);
   };
 
   // Toggle debug information
@@ -475,21 +372,6 @@ export default function PdfComparison({
         </div>
 
         <div className="flex flex-col items-center">
-          {viewMode !== "pdf" && (
-            <div className="flex space-x-2 mb-2">
-              <button
-                onClick={toggleFiltered}
-                className={`px-3 py-1 text-xs rounded ${
-                  showFiltered
-                    ? "bg-indigo-600 text-white"
-                    : "bg-gray-200 text-gray-700"
-                }`}
-              >
-                {showFiltered ? "Show Body Only" : "Show Full Text"}
-              </button>
-            </div>
-          )}
-
           <div className="flex space-x-2 mb-2">
             <button
               onClick={() => changeViewMode("side-diff")}
@@ -570,10 +452,8 @@ export default function PdfComparison({
               )}
               <div className="flex justify-between mb-2">
                 <span className="text-xs text-gray-500">
-                  {(showFiltered ? filteredLeftText : leftText)
-                    ? `${
-                        (showFiltered ? filteredLeftText : leftText).length
-                      } characters`
+                  {leftText
+                    ? `${leftText.length} characters`
                     : "No text extracted"}
                 </span>
               </div>
@@ -605,10 +485,8 @@ export default function PdfComparison({
               )}
               <div className="flex justify-between mb-2">
                 <span className="text-xs text-gray-500">
-                  {(showFiltered ? filteredRightText : rightText)
-                    ? `${
-                        (showFiltered ? filteredRightText : rightText).length
-                      } characters`
+                  {rightText
+                    ? `${rightText.length} characters`
                     : "No text extracted"}
                 </span>
               </div>

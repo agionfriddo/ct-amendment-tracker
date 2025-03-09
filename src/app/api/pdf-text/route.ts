@@ -3,302 +3,140 @@ import axios from "axios";
 import https from "https";
 import pdfParse from "pdf-parse";
 
-/**
- * Improves the formatting of extracted PDF text, specifically for legislative documents.
- * - Moves line numbers from the end to the beginning of each line
- * - Ensures text appearing on the same line in the PDF remains on the same line
- * - Preserves indentation and alignment
- * - Handles specific formatting for legislative amendments (section headers, amendment titles, etc.)
- * - Fixes common formatting issues (spacing, punctuation, etc.)
- * - Properly formats quoted text and amendment titles
- *
- * @param text The raw text extracted from the PDF
- * @returns Formatted text with improved readability
- */
-function improveTextFormatting(text: string): string {
-  if (!text) return text;
-
-  // Split text into lines and trim each line
-  const lines = text.split("\n").map((line) => line.trim());
-  const formattedLines: string[] = [];
-
-  // Regular expression to identify line numbers at the end of lines
-  const lineNumberRegex = /\s+(\d+)$/;
-
-  // Regular expression to identify district references (e.g., "86th Dist.")
-  const districtReferenceRegex = /\d+(st|nd|rd|th)\s+Dist\.$/i;
-
-  // Regular expression to identify partial district references (just the number)
-  const partialDistrictNumberRegex = /,\s*\d+$/;
-
-  // Regular expression to identify ordinal suffixes on their own line
-  const ordinalSuffixRegex = /^(st|nd|rd|th)$/i;
-
-  // Regular expression to identify "Dist." on its own line
-  const distLineRegex = /^Dist\.$/i;
-
-  // Regular expression to identify line numbers at the beginning of lines
-  const startingLineNumberRegex = /^(\d+)\s+/;
-
-  // Regular expression to identify section headers
-  const sectionHeaderRegex = /^(Section|Sec\.)\s+\d+\./i;
-
-  // Regular expression to identify amendment titles
-  const amendmentTitleRegex = /^(SB|HB)\s+\d+\s+Amendment/i;
-
-  // Regular expression to identify LCO numbers
-  const lcoNumberRegex = /^\d+\s+LCO\s+No\./i;
-
-  // Regular expression to identify page numbers
-  const pageNumberRegex = /^\d+\s+of\s+\d+$/;
-
-  // Regular expression to identify quoted text
-  const quotedTextRegex = /"([^"]+)"/g;
-
-  // Regular expression to identify amendment act titles
-  const actTitleRegex = /"AN ACT\s+[^"\.]+\."/i;
-
-  // Regular expression to identify congressperson references
-  const congresspersonRegex = /^(REP\.|SEN\.)\s+[A-Z]+/i;
-
-  // Calculate the maximum width needed for line numbers
-  let maxLineNumberWidth = 0;
-  for (const line of lines) {
-    const lineNumberMatch = line.match(lineNumberRegex);
-    if (lineNumberMatch) {
-      maxLineNumberWidth = Math.max(
-        maxLineNumberWidth,
-        lineNumberMatch[1].length
-      );
-    }
+function removeTextBeforeAct(text: string): string {
+  // Match "AN ACT" with any number of spaces between words
+  const match = text.match(/AN\s+ACT/i);
+  if (match) {
+    const index = text.indexOf(match[0]);
+    return text.substring(index);
   }
-  // Ensure minimum padding of 3 spaces
-  maxLineNumberWidth = Math.max(maxLineNumberWidth, 3);
+  return text;
+}
 
-  // First pass: Join split district references
-  for (let i = 0; i < lines.length - 2; i++) {
-    // Check for pattern: "SEN. NAME, 11" followed by "th" followed by "Dist."
-    if (
-      congresspersonRegex.test(lines[i]) &&
-      partialDistrictNumberRegex.test(lines[i]) &&
-      ordinalSuffixRegex.test(lines[i + 1]) &&
-      distLineRegex.test(lines[i + 2])
-    ) {
-      // Join the three lines
-      lines[i] = `${lines[i]}${lines[i + 1]} ${lines[i + 2]}`;
-      // Mark the next two lines to be skipped
-      lines[i + 1] = "";
-      lines[i + 2] = "";
-    }
-  }
+function normalizeSpaces(text: string): string {
+  // Split into lines, process each line, then rejoin
+  return text
+    .split("\n")
+    .map((line) =>
+      // Replace tabs and multiple spaces with a single space and trim
+      line.replace(/\s+/g, " ").trim()
+    )
+    .join("\n")
+    .trim();
+}
 
-  // Process each line
+function removeBlankLines(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .join("\n");
+}
+
+function joinFragmentedTLines(text: string): string {
+  const lines = text.split("\n");
+  const result: string[] = [];
+  let currentTLine = "";
+
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i].trim();
 
-    // Skip empty lines
-    if (!line) {
-      formattedLines.push("");
-      continue;
-    }
-
-    // Check if the line already has a line number at the beginning
-    const startingLineNumberMatch = line.match(startingLineNumberRegex);
-    if (startingLineNumberMatch) {
-      // Reformat to ensure consistent padding
-      const lineNumber = startingLineNumberMatch[1];
-      const textContent = line.substring(startingLineNumberMatch[0].length);
-      formattedLines.push(
-        `${lineNumber.padStart(maxLineNumberWidth)} ${textContent}`
-      );
-      continue;
-    }
-
-    // Check if this is a congressperson reference with district info
-    if (congresspersonRegex.test(line) || districtReferenceRegex.test(line)) {
-      formattedLines.push(line);
-      continue;
-    }
-
-    // Check if the line has a line number at the end (but not a district reference)
-    const lineNumberMatch = line.match(lineNumberRegex);
-    if (lineNumberMatch && !districtReferenceRegex.test(line)) {
-      const lineNumber = lineNumberMatch[1];
-      // Remove the line number from the end
-      const textContent = line.replace(lineNumberRegex, "").trim();
-
-      // Add the line number to the beginning with proper padding
-      formattedLines.push(
-        `${lineNumber.padStart(maxLineNumberWidth)} ${textContent}`
-      );
-    }
-    // Handle special formatting cases
-    else if (sectionHeaderRegex.test(line)) {
-      // Add extra spacing before section headers
-      if (
-        formattedLines.length > 0 &&
-        formattedLines[formattedLines.length - 1] !== ""
-      ) {
-        formattedLines.push("");
+    // If this is a new T-line, store any previous T-line and start a new one
+    if (line.match(/^T\d+/)) {
+      if (currentTLine) {
+        result.push(currentTLine);
       }
-      formattedLines.push(line);
-    } else if (amendmentTitleRegex.test(line)) {
-      // Format amendment titles with extra spacing
-      if (
-        formattedLines.length > 0 &&
-        formattedLines[formattedLines.length - 1] !== ""
-      ) {
-        formattedLines.push("");
-      }
-      formattedLines.push(line);
-      formattedLines.push("");
-    } else if (lcoNumberRegex.test(line) || pageNumberRegex.test(line)) {
-      // Handle LCO numbers and page numbers
-      formattedLines.push(line);
-    } else if (actTitleRegex.test(line)) {
-      // Format act titles with proper spacing and capitalization
-      if (
-        formattedLines.length > 0 &&
-        formattedLines[formattedLines.length - 1] !== ""
-      ) {
-        formattedLines.push("");
-      }
-      formattedLines.push(line.toUpperCase());
-      formattedLines.push("");
-    } else {
-      // Check if this line might be a continuation of the previous line
-      const previousLine =
-        formattedLines.length > 0
-          ? formattedLines[formattedLines.length - 1]
-          : "";
-      const previousHasLineNumber = previousLine.match(startingLineNumberRegex);
-
-      // If the previous line has a line number and this line doesn't look like a header,
-      // it might be a continuation
-      if (
-        previousHasLineNumber &&
-        !line.match(/^[A-Z\s]+$/) &&
-        !line.match(/^\d+\./) &&
-        !sectionHeaderRegex.test(line) &&
-        !amendmentTitleRegex.test(line) &&
-        !lcoNumberRegex.test(line) &&
-        !pageNumberRegex.test(line) &&
-        previousLine.length + line.length < 120 // Avoid creating extremely long lines
-      ) {
-        // Append to the previous line with proper spacing
-        formattedLines[formattedLines.length - 1] += ` ${line}`;
-      } else {
-        formattedLines.push(line);
-      }
+      currentTLine = line;
+    }
+    // If we're building a T-line and this line ends with a number, append and complete it
+    else if (currentTLine && line.match(/\d+$/)) {
+      currentTLine += " " + line;
+      result.push(currentTLine);
+      currentTLine = "";
+    }
+    // If we're building a T-line and this isn't a new T-line, append it
+    else if (currentTLine) {
+      currentTLine += " " + line;
+    }
+    // If we're not building a T-line, just add the line as is
+    else {
+      result.push(line);
     }
   }
 
-  // Join the lines back together
-  const result = formattedLines.join("\n");
+  // Add any remaining T-line
+  if (currentTLine) {
+    result.push(currentTLine);
+  }
 
-  // Additional processing for legislative document formatting
-  let formattedResult = result;
+  return result.join("\n");
+}
 
-  // Fix superscript formatting (e.g., "1st", "2nd", "3rd")
-  formattedResult = formattedResult.replace(
-    /(\d+)(st|nd|rd|th)\s+Dist\./gi,
-    "$1$2 Dist."
-  );
+function padNumber(num: string): string {
+  // Add 8 spaces after the number for alignment
+  return num.padEnd(num.length + 8);
+}
 
-  // Fix spacing around punctuation
-  formattedResult = formattedResult.replace(/\s+([.,;:)])/g, "$1");
-  formattedResult = formattedResult.replace(/([({])\s+/g, "$1");
+function indentTLine(line: string): string {
+  // Add the same amount of spaces as the number padding
+  return "        " + line;
+}
 
-  // Remove excessive blank lines (more than 2 consecutive)
-  formattedResult = formattedResult.replace(/\n{3,}/g, "\n\n");
+function moveEndingNumbersToStart(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => {
+      // Indent T-lines with the same spacing
+      if (line.match(/^T\d+/)) {
+        return indentTLine(line);
+      }
 
-  // Format quoted text blocks with proper indentation
-  formattedResult = formattedResult.replace(quotedTextRegex, (match, p1) => {
-    return `"${p1.trim()}"`;
-  });
-
-  // Format amendment titles in all caps
-  formattedResult = formattedResult.replace(/(AN ACT[^\.]+\.)/gi, (match) => {
-    return match.toUpperCase();
-  });
-
-  // Ensure consistent spacing after periods in sentences
-  formattedResult = formattedResult.replace(/\.(\w)/g, ". $1");
-
-  // Fix indentation for quoted text blocks
-  formattedResult = formattedResult.replace(/^"(.+)"$/gm, (match, p1) => {
-    if (p1.includes("\n")) {
-      return `"${p1
-        .split("\n")
-        .map((line: string) => line.trim())
-        .join("\n  ")}"`;
-    }
-    return match;
-  });
-
-  // Ensure proper spacing for subsections and numbered items
-  formattedResult = formattedResult.replace(/(\d+)\s*\)\s*/g, "$1) ");
-
-  // Fix spacing for inclusive ranges
-  formattedResult = formattedResult.replace(/(\w+)\s*-\s*(\w+)/g, "$1-$2");
-
-  // Ensure proper spacing after commas in lists
-  formattedResult = formattedResult.replace(/,(\w)/g, ", $1");
-
-  return formattedResult;
+      // Match either a standalone number or a number after text-hyphen at the end of the line
+      const match = line.match(
+        /^(.*?)(?:\s+(\d+(?:,\d+)*)|\s+\S+-(\d+(?:,\d+)*))$/
+      );
+      if (match) {
+        // The number will be in either group 2 (standalone) or group 3 (after hyphen)
+        const number = match[2] || match[3];
+        // The text is always in group 1
+        return `${padNumber(number)}${match[1]}`;
+      }
+      return line;
+    })
+    .join("\n");
 }
 
 export async function GET(request: NextRequest) {
-  console.log("PDF text extraction API called");
-  const url = request.nextUrl.searchParams.get("url");
-  if (!url) {
-    return NextResponse.json(
-      { error: "URL parameter is required" },
-      { status: 400 }
-    );
-  }
-
   try {
-    console.log(`Fetching PDF from URL: ${url}`);
+    const url = request.nextUrl.searchParams.get("url");
+    if (!url) {
+      return NextResponse.json(
+        { error: "URL parameter is required" },
+        { status: 400 }
+      );
+    }
 
-    // Create a custom HTTPS agent that ignores SSL certificate errors
-    const httpsAgent = new https.Agent({
+    const agent = new https.Agent({
       rejectUnauthorized: false,
     });
 
-    // Fetch the PDF using axios with SSL verification disabled
     const response = await axios.get(url, {
       responseType: "arraybuffer",
-      httpsAgent: httpsAgent,
+      httpsAgent: agent,
     });
 
-    // Get the PDF data as Buffer (pdf-parse expects a Buffer)
-    const pdfBuffer = Buffer.from(response.data);
-    console.log(`PDF fetched, size: ${pdfBuffer.length} bytes`);
+    const data = await pdfParse(response.data);
+    const textWithoutPrefix = removeTextBeforeAct(data.text);
+    const normalizedText = normalizeSpaces(textWithoutPrefix);
+    const textWithoutBlankLines = removeBlankLines(normalizedText);
+    const textWithJoinedTLines = joinFragmentedTLines(textWithoutBlankLines);
+    const textWithReorderedNumbers =
+      moveEndingNumbersToStart(textWithJoinedTLines);
 
-    // Extract text from PDF using pdf-parse
-    const data = await pdfParse(pdfBuffer);
-    const extractedText = data.text;
-
-    // Apply formatting improvements
-    const formattedText = improveTextFormatting(extractedText);
-
-    console.log(
-      `Extracted ${formattedText.length} characters of text from PDF`
-    );
-
-    return NextResponse.json({
-      text: formattedText,
-      numpages: data.numpages,
-      info: data.info,
-    });
+    return NextResponse.json({ text: textWithReorderedNumbers });
   } catch (error) {
-    console.error("Error extracting PDF text:", error);
+    console.error("Error processing PDF:", error);
     return NextResponse.json(
-      {
-        error: "Failed to extract text from PDF",
-        details: error instanceof Error ? error.message : String(error),
-      },
+      { error: "Failed to process PDF" },
       { status: 500 }
     );
   }
