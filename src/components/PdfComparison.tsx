@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Amendment } from "@/context/AmendmentsContext";
 import axios from "axios";
-import PdfViewer from "./PdfViewer";
 import * as Diff from "diff";
 
 interface PdfComparisonProps {
@@ -13,7 +12,6 @@ interface PdfComparisonProps {
   rightLabel?: string;
   leftAmendment?: Amendment | null;
   rightAmendment?: Amendment | null;
-  filterNonEssentialText?: boolean;
 }
 
 // Type for view mode
@@ -26,7 +24,6 @@ export default function PdfComparison({
   rightLabel,
   leftAmendment,
   rightAmendment,
-  filterNonEssentialText = true,
 }: PdfComparisonProps) {
   const [leftText, setLeftText] = useState<string>("");
   const [rightText, setRightText] = useState<string>("");

@@ -4,7 +4,6 @@ import { useParams } from "next/navigation";
 import { useAmendments } from "@/context/AmendmentsContext";
 import { useBills } from "@/context/BillsContext";
 import AmendmentList from "@/components/AmendmentList";
-import Link from "next/link";
 
 export default function BillDetailPage() {
   const params = useParams();
@@ -75,7 +74,6 @@ export default function BillDetailPage() {
   }
 
   const hasBillPdf = bill.pdfLinks.length > 0;
-  const hasAmendments = amendments.length > 0;
 
   return (
     <div className="space-y-6">
