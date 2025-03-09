@@ -32,53 +32,14 @@ function removeBlankLines(text: string): string {
     .join("\n");
 }
 
-function joinFragmentedTLines(text: string): string {
-  const lines = text.split("\n");
-  const result: string[] = [];
-  let currentTLine = "";
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-
-    // If this is a new T-line, store any previous T-line and start a new one
-    if (line.match(/^T\d+/)) {
-      if (currentTLine) {
-        result.push(currentTLine);
-      }
-      currentTLine = line;
-    }
-    // If we're building a T-line and this line ends with a number, append and complete it
-    else if (currentTLine && line.match(/\d+$/)) {
-      currentTLine += " " + line;
-      result.push(currentTLine);
-      currentTLine = "";
-    }
-    // If we're building a T-line and this isn't a new T-line, append it
-    else if (currentTLine) {
-      currentTLine += " " + line;
-    }
-    // If we're not building a T-line, just add the line as is
-    else {
-      result.push(line);
-    }
-  }
-
-  // Add any remaining T-line
-  if (currentTLine) {
-    result.push(currentTLine);
-  }
-
-  return result.join("\n");
-}
-
 function padNumber(num: string): string {
-  // Add 8 spaces after the number for alignment
-  return num.padEnd(num.length + 8);
+  // Pad to width of 6 (3 for number, 3 for spacing)
+  return num.padStart(3).padEnd(6);
 }
 
 function indentTLine(line: string): string {
-  // Add the same amount of spaces as the number padding
-  return "        " + line;
+  // Match the fixed width used in padNumber
+  return "      " + line;
 }
 
 function moveEndingNumbersToStart(text: string): string {
@@ -105,6 +66,33 @@ function moveEndingNumbersToStart(text: string): string {
     .join("\n");
 }
 
+function removeNonSequentialLines(text: string): string {
+  const lines = text.split("\n");
+  const result: string[] = [];
+  let expectedNumber = 1;
+
+  for (const line of lines) {
+    // Keep T-lines
+    if (line.match(/^\s*T\d+/)) {
+      result.push(line);
+      continue;
+    }
+
+    // Check if line starts with a number (after possible spaces)
+    const numberMatch = line.match(/^\s*(\d+)/);
+    if (numberMatch) {
+      const lineNumber = parseInt(numberMatch[1], 10);
+      // Only keep the line if it matches the expected sequence
+      if (lineNumber === expectedNumber) {
+        result.push(line);
+        expectedNumber++;
+      }
+    }
+  }
+
+  return result.join("\n");
+}
+
 export async function GET(request: NextRequest) {
   try {
     const url = request.nextUrl.searchParams.get("url");
@@ -128,11 +116,14 @@ export async function GET(request: NextRequest) {
     const textWithoutPrefix = removeTextBeforeAct(data.text);
     const normalizedText = normalizeSpaces(textWithoutPrefix);
     const textWithoutBlankLines = removeBlankLines(normalizedText);
-    const textWithJoinedTLines = joinFragmentedTLines(textWithoutBlankLines);
-    const textWithReorderedNumbers =
-      moveEndingNumbersToStart(textWithJoinedTLines);
+    const textWithReorderedNumbers = moveEndingNumbersToStart(
+      textWithoutBlankLines
+    );
+    const textWithSequentialLines = removeNonSequentialLines(
+      textWithReorderedNumbers
+    );
 
-    return NextResponse.json({ text: textWithReorderedNumbers });
+    return NextResponse.json({ text: textWithSequentialLines });
   } catch (error) {
     console.error("Error processing PDF:", error);
     return NextResponse.json(
