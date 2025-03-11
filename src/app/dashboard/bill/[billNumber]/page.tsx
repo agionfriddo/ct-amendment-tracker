@@ -70,7 +70,7 @@ export default function BillDetailPage() {
         setBillText(data.text);
         setTextLoading(false);
 
-        const newSummary = await generateSummary(data.text, billNumber);
+        const newSummary = await generateSummary(data.text);
         setSummary(newSummary);
         setSummaryLoading(false);
       } catch (error) {
@@ -95,7 +95,7 @@ export default function BillDetailPage() {
     setSummaryError(null);
 
     try {
-      const newSummary = await generateSummary(billText, billNumber);
+      const newSummary = await generateSummary(billText);
       setSummary(newSummary);
     } catch (error) {
       setSummaryError(
