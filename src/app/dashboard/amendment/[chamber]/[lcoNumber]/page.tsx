@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAmendments } from "@/context/AmendmentsContext";
 import PdfViewer from "@/components/PdfViewer";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useBills } from "@/context/BillsContext";
 
 // Define tab types for type safety
@@ -36,39 +36,42 @@ export default function AmendmentDetailPage() {
   const amendment = amendments.find((a) => a.lcoNumber === lcoNumber);
   const bill = amendment ? getBillByNumber(amendment.billNumber) : null;
 
-  const generateSummary = async (amendmentText: string, billText: string) => {
-    const summaryResponse = await fetch("/api/summarize-amendment", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ amendmentText, billText }),
-    });
+  const generateSummary = useCallback(
+    async (amendmentText: string, billText: string) => {
+      const summaryResponse = await fetch("/api/summarize-amendment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ amendmentText, billText }),
+      });
 
-    if (!summaryResponse.ok) {
-      throw new Error("Failed to generate summary");
-    }
+      if (!summaryResponse.ok) {
+        throw new Error("Failed to generate summary");
+      }
 
-    const summaryData = await summaryResponse.json();
+      const summaryData = await summaryResponse.json();
 
-    // Store the summary in DynamoDB
-    const storeResponse = await fetch(`/api/amendments/${chamber}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        lcoNumber,
-        summary: summaryData.summary,
-      }),
-    });
+      // Store the summary in DynamoDB
+      const storeResponse = await fetch(`/api/amendments/${chamber}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          lcoNumber,
+          summary: summaryData.summary,
+        }),
+      });
 
-    if (!storeResponse.ok) {
-      console.error("Failed to store summary in database");
-    }
+      if (!storeResponse.ok) {
+        console.error("Failed to store summary in database");
+      }
 
-    return summaryData.summary;
-  };
+      return summaryData.summary;
+    },
+    [chamber, lcoNumber]
+  );
 
   useEffect(() => {
     async function fetchTexts() {
