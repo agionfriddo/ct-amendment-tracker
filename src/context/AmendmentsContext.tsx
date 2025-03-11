@@ -19,6 +19,8 @@ export interface Amendment {
   lcoNumber: string;
   calNumber: string;
   chamber: "senate" | "house";
+  summary?: string | null;
+  updatedAt?: string | null;
 }
 
 interface AmendmentsContextType {

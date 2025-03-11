@@ -15,6 +15,8 @@ export interface Bill {
   billNumber: string;
   billLink: string;
   pdfLinks: string[];
+  summary?: string | null;
+  updatedAt?: string | null;
 }
 
 interface BillsContextType {

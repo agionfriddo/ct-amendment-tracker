@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 import { useBills } from "@/context/BillsContext";
 
 // Define tab types for type safety
-type TabType = "info" | "pdf" | "text";
+type TabType = "info" | "pdf";
 
 export default function AmendmentDetailPage() {
   const params = useParams();
@@ -36,6 +36,40 @@ export default function AmendmentDetailPage() {
   const amendment = amendments.find((a) => a.lcoNumber === lcoNumber);
   const bill = amendment ? getBillByNumber(amendment.billNumber) : null;
 
+  const generateSummary = async (amendmentText: string, billText: string) => {
+    const summaryResponse = await fetch("/api/summarize-amendment", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ amendmentText, billText }),
+    });
+
+    if (!summaryResponse.ok) {
+      throw new Error("Failed to generate summary");
+    }
+
+    const summaryData = await summaryResponse.json();
+
+    // Store the summary in DynamoDB
+    const storeResponse = await fetch(`/api/amendments/${chamber}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        lcoNumber,
+        summary: summaryData.summary,
+      }),
+    });
+
+    if (!storeResponse.ok) {
+      console.error("Failed to store summary in database");
+    }
+
+    return summaryData.summary;
+  };
+
   useEffect(() => {
     async function fetchTexts() {
       if (!amendment?.lcoLink || !bill?.pdfLinks?.[0]) return;
@@ -46,7 +80,29 @@ export default function AmendmentDetailPage() {
       setSummaryError(null);
 
       try {
-        // Fetch amendment text
+        // First try to fetch existing summary from DynamoDB
+        const existingResponse = await fetch(`/api/amendments/${chamber}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (existingResponse.ok) {
+          const amendments = await existingResponse.json();
+          const currentAmendment = amendments.find(
+            (a: { lcoNumber: string }) => a.lcoNumber === lcoNumber
+          );
+          if (currentAmendment?.summary) {
+            setSummary(currentAmendment.summary);
+            setSummaryLoading(false);
+            // Only fetch texts if we still need them
+            await fetchTextsOnly();
+            return;
+          }
+        }
+
+        // If no existing summary, fetch texts and generate new summary
         const amendmentResponse = await fetch(
           `/api/pdf-text?url=${encodeURIComponent(amendment.lcoLink)}`
         );
@@ -56,7 +112,6 @@ export default function AmendmentDetailPage() {
         const amendmentData = await amendmentResponse.json();
         setAmendmentText(amendmentData.text);
 
-        // Fetch bill text
         const billResponse = await fetch(
           `/api/pdf-text?url=${encodeURIComponent(bill.pdfLinks[0])}`
         );
@@ -66,24 +121,11 @@ export default function AmendmentDetailPage() {
         const billData = await billResponse.json();
         setBillText(billData.text);
 
-        // Generate summary
-        const summaryResponse = await fetch("/api/summarize-amendment", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            amendmentText: amendmentData.text,
-            billText: billData.text,
-          }),
-        });
-
-        if (!summaryResponse.ok) {
-          throw new Error("Failed to generate summary");
-        }
-
-        const summaryData = await summaryResponse.json();
-        setSummary(summaryData.summary);
+        const newSummary = await generateSummary(
+          amendmentData.text,
+          billData.text
+        );
+        setSummary(newSummary);
         setSummaryLoading(false);
       } catch (error) {
         setTextError(
@@ -98,33 +140,48 @@ export default function AmendmentDetailPage() {
       }
     }
 
+    async function fetchTextsOnly() {
+      if (!amendment?.lcoLink || !bill?.pdfLinks?.[0]) return;
+
+      try {
+        const amendmentResponse = await fetch(
+          `/api/pdf-text?url=${encodeURIComponent(amendment.lcoLink)}`
+        );
+        if (!amendmentResponse.ok) {
+          throw new Error("Failed to fetch amendment text");
+        }
+        const amendmentData = await amendmentResponse.json();
+        setAmendmentText(amendmentData.text);
+
+        const billResponse = await fetch(
+          `/api/pdf-text?url=${encodeURIComponent(bill.pdfLinks[0])}`
+        );
+        if (!billResponse.ok) {
+          throw new Error("Failed to fetch bill text");
+        }
+        const billData = await billResponse.json();
+        setBillText(billData.text);
+        setTextLoading(false);
+      } catch (error) {
+        setTextLoading(false);
+        setTextError(
+          error instanceof Error ? error.message : "Failed to fetch texts"
+        );
+      }
+    }
+
     fetchTexts();
-  }, [amendment?.lcoLink, bill?.pdfLinks]);
+  }, [amendment?.lcoLink, bill?.pdfLinks, chamber, lcoNumber, generateSummary]);
 
   const handleRegenerateSummary = async () => {
-    if (!amendmentText || !billText) return;
+    if (!amendmentText || !billText || !amendment) return;
 
     setIsRegenerating(true);
     setSummaryError(null);
 
     try {
-      const summaryResponse = await fetch("/api/summarize-amendment", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          amendmentText,
-          billText,
-        }),
-      });
-
-      if (!summaryResponse.ok) {
-        throw new Error("Failed to generate summary");
-      }
-
-      const summaryData = await summaryResponse.json();
-      setSummary(summaryData.summary);
+      const newSummary = await generateSummary(amendmentText, billText);
+      setSummary(newSummary);
     } catch (error) {
       setSummaryError(
         error instanceof Error ? error.message : "Failed to regenerate summary"
@@ -244,7 +301,6 @@ export default function AmendmentDetailPage() {
         <div className="flex border-b border-gray-200 bg-gray-50 px-4 pt-4">
           <TabButton tab="info" label="Amendment Information" />
           <TabButton tab="pdf" label="View PDF" />
-          <TabButton tab="text" label="Text & Analysis" />
         </div>
 
         {/* Tab content */}
@@ -325,36 +381,24 @@ export default function AmendmentDetailPage() {
                   </dd>
                 </div>
               </dl>
-            </div>
-          )}
 
-          {/* PDF Viewer Tab */}
-          {activeTab === "pdf" && (
-            <div>
-              <div className="px-4 py-3 bg-gray-50 border-t border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">
-                  Amendment PDF
-                </h3>
-              </div>
-              <div className="h-screen max-h-[800px]">
-                <PdfViewer url={amendment.lcoLink} />
-              </div>
-            </div>
-          )}
-
-          {/* Text & Analysis Tab */}
-          {activeTab === "text" && (
-            <div>
-              <div className="px-4 py-3 bg-gray-50 border-t border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">
-                  Amendment Text & Analysis
-                </h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  View the amendment text and its impact on the bill
-                </p>
-              </div>
-              <div className="grid grid-cols-12 gap-6 p-4">
-                <div className="col-span-7">
+              {/* Text & Analysis Section */}
+              <div className="border-t border-gray-200 mt-6">
+                <div className="px-4 py-3 bg-gray-50">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Amendment Text & Analysis
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    View the amendment text and its impact on the bill
+                    {amendment.updatedAt && (
+                      <span className="ml-2 text-gray-400">
+                        · Last updated{" "}
+                        {new Date(amendment.updatedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="space-y-6 p-4">
                   <div className="bg-white shadow rounded-lg p-4">
                     <h4 className="text-base font-medium text-gray-900 mb-4">
                       Amendment Text
@@ -375,8 +419,6 @@ export default function AmendmentDetailPage() {
                       </p>
                     )}
                   </div>
-                </div>
-                <div className="col-span-5">
                   <div className="bg-white shadow rounded-lg p-4">
                     <div className="flex justify-between items-center mb-4">
                       <h4 className="text-base font-medium text-gray-900">
@@ -406,6 +448,20 @@ export default function AmendmentDetailPage() {
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* PDF Viewer Tab */}
+          {activeTab === "pdf" && (
+            <div>
+              <div className="px-4 py-3 bg-gray-50 border-t border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Amendment PDF
+                </h3>
+              </div>
+              <div className="h-screen max-h-[800px]">
+                <PdfViewer url={amendment.lcoLink} />
               </div>
             </div>
           )}
