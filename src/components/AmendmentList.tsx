@@ -34,6 +34,9 @@ export default function AmendmentList({
   const sortedAmendments = [...filteredAmendments].sort((a, b) => {
     const aValue = a[sortField];
     const bValue = b[sortField];
+    if (aValue === undefined && bValue === undefined) return 0;
+    if (!aValue) return 1;
+    if (!bValue) return -1;
 
     if (sortDirection === "asc") {
       return aValue > bValue ? 1 : -1;
