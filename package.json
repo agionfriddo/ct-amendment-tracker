@@ -12,6 +12,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@aws-sdk/client-dynamodb": "^3.758.0",
     "@aws-sdk/lib-dynamodb": "^3.751.0",
     "@react-pdf-viewer/core": "^3.12.0",

@@ -3,9 +3,9 @@
 import { useParams, useRouter } from "next/navigation";
 import { useAmendments } from "@/context/AmendmentsContext";
 import PdfViewer from "@/components/PdfViewer";
-import PdfTextExtractor from "@/components/PdfTextExtractor";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useBills } from "@/context/BillsContext";
 
 // Define tab types for type safety
 type TabType = "info" | "pdf" | "text";
@@ -16,13 +16,123 @@ export default function AmendmentDetailPage() {
   const chamber = params.chamber as "senate" | "house";
   const lcoNumber = params.lcoNumber as string;
   const { senateAmendments, houseAmendments, loading, error } = useAmendments();
+  const { getBillByNumber } = useBills();
 
   // State to track the active tab
   const [activeTab, setActiveTab] = useState<TabType>("info");
 
+  // State for amendment text and summary
+  const [amendmentText, setAmendmentText] = useState<string | null>(null);
+  const [billText, setBillText] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [textLoading, setTextLoading] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [textError, setTextError] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+
   // Find the amendment
   const amendments = chamber === "senate" ? senateAmendments : houseAmendments;
   const amendment = amendments.find((a) => a.lcoNumber === lcoNumber);
+  const bill = amendment ? getBillByNumber(amendment.billNumber) : null;
+
+  useEffect(() => {
+    async function fetchTexts() {
+      if (!amendment?.lcoLink || !bill?.pdfLinks?.[0]) return;
+
+      setTextLoading(true);
+      setTextError(null);
+      setSummaryLoading(true);
+      setSummaryError(null);
+
+      try {
+        // Fetch amendment text
+        const amendmentResponse = await fetch(
+          `/api/pdf-text?url=${encodeURIComponent(amendment.lcoLink)}`
+        );
+        if (!amendmentResponse.ok) {
+          throw new Error("Failed to fetch amendment text");
+        }
+        const amendmentData = await amendmentResponse.json();
+        setAmendmentText(amendmentData.text);
+
+        // Fetch bill text
+        const billResponse = await fetch(
+          `/api/pdf-text?url=${encodeURIComponent(bill.pdfLinks[0])}`
+        );
+        if (!billResponse.ok) {
+          throw new Error("Failed to fetch bill text");
+        }
+        const billData = await billResponse.json();
+        setBillText(billData.text);
+
+        // Generate summary
+        const summaryResponse = await fetch("/api/summarize-amendment", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            amendmentText: amendmentData.text,
+            billText: billData.text,
+          }),
+        });
+
+        if (!summaryResponse.ok) {
+          throw new Error("Failed to generate summary");
+        }
+
+        const summaryData = await summaryResponse.json();
+        setSummary(summaryData.summary);
+        setSummaryLoading(false);
+      } catch (error) {
+        setTextError(
+          error instanceof Error ? error.message : "Failed to fetch texts"
+        );
+        setSummaryError(
+          error instanceof Error ? error.message : "Failed to generate summary"
+        );
+      } finally {
+        setTextLoading(false);
+        setSummaryLoading(false);
+      }
+    }
+
+    fetchTexts();
+  }, [amendment?.lcoLink, bill?.pdfLinks]);
+
+  const handleRegenerateSummary = async () => {
+    if (!amendmentText || !billText) return;
+
+    setIsRegenerating(true);
+    setSummaryError(null);
+
+    try {
+      const summaryResponse = await fetch("/api/summarize-amendment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amendmentText,
+          billText,
+        }),
+      });
+
+      if (!summaryResponse.ok) {
+        throw new Error("Failed to generate summary");
+      }
+
+      const summaryData = await summaryResponse.json();
+      setSummary(summaryData.summary);
+    } catch (error) {
+      setSummaryError(
+        error instanceof Error ? error.message : "Failed to regenerate summary"
+      );
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -134,7 +244,7 @@ export default function AmendmentDetailPage() {
         <div className="flex border-b border-gray-200 bg-gray-50 px-4 pt-4">
           <TabButton tab="info" label="Amendment Information" />
           <TabButton tab="pdf" label="View PDF" />
-          <TabButton tab="text" label="Extracted Text" />
+          <TabButton tab="text" label="Text & Analysis" />
         </div>
 
         {/* Tab content */}
@@ -232,24 +342,70 @@ export default function AmendmentDetailPage() {
             </div>
           )}
 
-          {/* Extracted Text Tab */}
+          {/* Text & Analysis Tab */}
           {activeTab === "text" && (
             <div>
               <div className="px-4 py-3 bg-gray-50 border-t border-b border-gray-200">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Amendment Text
+                  Amendment Text & Analysis
                 </h3>
                 <p className="mt-1 text-sm text-gray-500">
-                  Extracted text from the amendment PDF
+                  View the amendment text and its impact on the bill
                 </p>
               </div>
-              <div className="p-4">
-                <PdfTextExtractor
-                  pdfUrl={amendment.lcoLink}
-                  title={`${
-                    chamber === "senate" ? "Senate" : "House"
-                  } Amendment ${lcoNumber}`}
-                />
+              <div className="grid grid-cols-12 gap-6 p-4">
+                <div className="col-span-7">
+                  <div className="bg-white shadow rounded-lg p-4">
+                    <h4 className="text-base font-medium text-gray-900 mb-4">
+                      Amendment Text
+                    </h4>
+                    {textLoading ? (
+                      <div className="flex justify-center items-center h-32">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                      </div>
+                    ) : textError ? (
+                      <div className="text-red-600 text-sm">{textError}</div>
+                    ) : amendmentText ? (
+                      <pre className="whitespace-pre-wrap text-black overflow-x-auto text-sm">
+                        {amendmentText}
+                      </pre>
+                    ) : (
+                      <p className="text-gray-500">
+                        No amendment text available
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="col-span-5">
+                  <div className="bg-white shadow rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="text-base font-medium text-gray-900">
+                        Impact Analysis
+                      </h4>
+                      {summary && !summaryLoading && !isRegenerating && (
+                        <button
+                          onClick={handleRegenerateSummary}
+                          className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                          Regenerate Analysis
+                        </button>
+                      )}
+                    </div>
+                    {summaryLoading || isRegenerating ? (
+                      <div className="flex justify-center items-center h-32">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                      </div>
+                    ) : summaryError ? (
+                      <div className="text-red-600 text-sm">{summaryError}</div>
+                    ) : summary ? (
+                      <div className="prose max-w-none text-black">
+                        <div className="whitespace-pre-wrap">{summary}</div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500">No analysis available</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
