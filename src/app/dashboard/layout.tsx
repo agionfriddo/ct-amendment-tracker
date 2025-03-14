@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -12,12 +12,14 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navigation = [
     { name: "All Amendments", href: "/dashboard" },
     { name: "Senate Amendments", href: "/dashboard/senate" },
     { name: "House Amendments", href: "/dashboard/house" },
     { name: "By Bill", href: "/dashboard/by-bill" },
+    { name: "Compare PDFs", href: "/dashboard/compare" },
   ];
 
   return (
@@ -64,9 +66,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               {/* Mobile menu button */}
               <button
                 type="button"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className="inline-flex items-center justify-center rounded-md bg-indigo-600 p-2 text-indigo-200 hover:bg-indigo-500 hover:text-white focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-indigo-600"
                 aria-controls="mobile-menu"
-                aria-expanded="false"
+                aria-expanded={isMobileMenuOpen}
               >
                 <span className="sr-only">Open main menu</span>
                 <svg
@@ -90,7 +93,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
 
         {/* Mobile menu, show/hide based on menu state */}
-        <div className="md:hidden" id="mobile-menu">
+        <div
+          className={`md:hidden ${isMobileMenuOpen ? "block" : "hidden"}`}
+          id="mobile-menu"
+        >
           <div className="space-y-1 px-2 pb-3 pt-2 sm:px-3">
             {navigation.map((item) => (
               <Link
