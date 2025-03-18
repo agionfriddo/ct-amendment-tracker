@@ -1,0 +1,69 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - staging
+
+env:
+  AWS_REGION: us-east-1 # Change this to your AWS region
+  ECR_REPOSITORY: session-tracker-frontend # Change this to your ECR repository name
+  EC2_HOST: https://staging.amendment-tracker.andrewtgionfriddo.com # Change this to your EC2 host
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ env.EC2_HOST }}
+          username: ec2-user # Change this if using a different username
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            # Login to ECR
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+
+            # Pull the latest image
+            docker pull ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+
+            # Stop and remove the old container (if it exists)
+            docker stop session-tracker-frontend || true
+            docker rm session-tracker-frontend || true
+
+            # Run the new container
+            docker run -d \
+              --name session-tracker-frontend \
+              -p 3000:3000 \
+              --restart unless-stopped \
+              -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" \
+              -e ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}" \
+              -e NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}" \
+              -e NEXTAUTH_URL="${{ secrets.NEXTAUTH_URL }}" \
+              ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
