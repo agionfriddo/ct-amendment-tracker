@@ -8,7 +8,6 @@ on:
 env:
   AWS_REGION: us-east-1 # Change this to your AWS region
   ECR_REPOSITORY: session-tracker-frontend # Change this to your ECR repository name
-  EC2_HOST: staging.amendment-tracker.andrewtgionfriddo.com
 
 jobs:
   deploy:
@@ -43,7 +42,7 @@ jobs:
       - name: Deploy to EC2
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ env.EC2_HOST }}
+          host: ${{ secrets.EC2_HOST }}
           username: ec2-user # Change this if using a different username
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
