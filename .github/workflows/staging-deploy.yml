@@ -8,7 +8,7 @@ on:
 env:
   AWS_REGION: us-east-1 # Change this to your AWS region
   ECR_REPOSITORY: session-tracker-frontend # Change this to your ECR repository name
-  EC2_HOST: https://staging.amendment-tracker.andrewtgionfriddo.com # Change this to your EC2 host
+    EC2_HOST: staging.amendment-tracker.andrewtgionfriddo.com
 
 jobs:
   deploy:
