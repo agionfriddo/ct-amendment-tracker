@@ -1,5 +1,4 @@
 import {
-  DynamoDBClient,
   ScanCommand,
   PutItemCommand,
   GetItemCommand,
@@ -9,6 +8,7 @@ import * as dotenv from "dotenv";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import https from "https";
+import { client } from "../src/app/api/utils/dynamoClient";
 
 // Load environment variables
 dotenv.config();
@@ -16,15 +16,6 @@ dotenv.config();
 // Create an https agent that ignores SSL certificate issues
 const httpsAgent = new https.Agent({
   rejectUnauthorized: false,
-});
-
-// Initialize DynamoDB client
-const client = new DynamoDBClient({
-  region: process.env.AWS_REGION || "us-east-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
-  },
 });
 
 interface Amendment {
