@@ -32,6 +32,14 @@ export async function POST(req: Request) {
       );
     }
 
+    // Verify that the registration email matches the invited email
+    if (email.toLowerCase() !== invite.email.toLowerCase()) {
+      return NextResponse.json(
+        { error: "Registration email must match the invited email address" },
+        { status: 400 }
+      );
+    }
+
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: { email },

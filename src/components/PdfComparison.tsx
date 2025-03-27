@@ -443,7 +443,7 @@ export default function PdfComparison({
 
       {viewMode === "side-diff" && (
         <div className="flex flex-1 px-4 py-4 overflow-auto">
-          <div className="w-[49%]">
+          <div className="w-[49.5%]">
             <div className="bg-white shadow-sm rounded-lg p-4">
               {leftError && (
                 <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
@@ -475,8 +475,8 @@ export default function PdfComparison({
               </div>
             </div>
           </div>
-          <div className="w-[2%]"></div>
-          <div className="w-[49%]">
+          <div className="w-[1%]"></div>
+          <div className="w-[49.5%]">
             <div className="bg-white shadow-sm rounded-lg p-4">
               {rightError && (
                 <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
@@ -536,15 +536,15 @@ export default function PdfComparison({
 
       {viewMode === "pdf" && (
         <div className="flex px-4 py-4">
-          <div className="w-[49%]">
+          <div className="w-[49.5%]">
             <iframe
               ref={leftIframeRef}
               src={leftUrl}
               className="w-full h-[800px]"
             />
           </div>
-          <div className="w-[2%]"></div>
-          <div className="w-[49%]">
+          <div className="w-[1%]"></div>
+          <div className="w-[49.5%]">
             <iframe
               ref={rightIframeRef}
               src={rightUrl}

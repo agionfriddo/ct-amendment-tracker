@@ -30,7 +30,6 @@ model Invite {
   email       String   @unique
   code        String   @unique
   used        Boolean  @default(false)
-  isAdmin     Boolean  @default(false)
   expiresAt   DateTime
   createdAt   DateTime @default(now())
   user        User?    @relation("UserInvite")

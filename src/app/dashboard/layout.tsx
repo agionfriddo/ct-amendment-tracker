@@ -20,12 +20,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: "House Amendments", href: "/dashboard/house" },
     { name: "By Bill", href: "/dashboard/by-bill" },
     { name: "Compare PDFs", href: "/dashboard/compare" },
+    ...(session?.user?.isAdmin
+      ? [{ name: "Manage Invites", href: "/admin/invites" }]
+      : []),
   ];
 
   return (
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-indigo-600">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1920px] px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -135,7 +138,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="w-full">{children}</div>
           ) : (
             // For other dashboard pages, keep the standard container
-            <div className="mx-auto max-w-7xl sm:px-6 lg:px-8">{children}</div>
+            <div className="mx-auto max-w-[1920px] sm:px-6 lg:px-8">
+              {children}
+            </div>
           )}
         </div>
       </main>
