@@ -15,7 +15,9 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/admin") ||
     request.nextUrl.pathname.startsWith("/api/admin");
   // Define auth paths
-  const isAuthPath = request.nextUrl.pathname.startsWith("/login");
+  const isAuthPath =
+    request.nextUrl.pathname.startsWith("/login") ||
+    request.nextUrl.pathname.startsWith("/register");
 
   // Protect API routes (except auth routes)
   if (isApiRoute && !isAuthRoute && !isAuthenticated) {
@@ -57,6 +59,7 @@ export const config = {
     "/api/:path*",
     // Auth routes
     "/login",
+    "/register",
     // Protected page routes
     "/dashboard/:path*",
     "/admin/:path*",

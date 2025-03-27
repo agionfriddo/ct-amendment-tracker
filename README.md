@@ -34,7 +34,15 @@ A web application for tracking amendments from the Connecticut General Assembly.
 5. Edit the `.env.local` file with your credentials:
    - Generate a secure `NEXTAUTH_SECRET` (you can use `openssl rand -base64 32`)
    - Set your admin email and password
-   - Add your AWS credentials
+   - Add your AWS credentials:
+     ```
+     AWS_ACCESS_KEY_ID=your_access_key_id
+     AWS_SECRET_ACCESS_KEY=your_secret_access_key
+     AWS_REGION=your_aws_region
+     SES_FROM_EMAIL=your_verified_ses_email
+     ```
+   - Set your database URL
+   - Set your NextAuth URL
 6. Run the development server:
    ```bash
    npm run dev

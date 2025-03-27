@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 import { authOptions } from "../../auth/[...nextauth]/route";
+import { sendInviteEmail } from "@/lib/ses";
 
 // Helper function to generate a random invite code
 function generateInviteCode() {
@@ -70,15 +71,31 @@ export async function POST(req: Request) {
       );
     }
 
+    const inviteCode = generateInviteCode();
+
     // Create new invite
     const invite = await prisma.invite.create({
       data: {
         email,
-        code: generateInviteCode(),
+        code: inviteCode,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
         createdById: session.user.id,
       },
     });
+
+    // Send invite email
+    const emailSent = await sendInviteEmail(email, inviteCode);
+
+    if (!emailSent) {
+      // If email fails to send, delete the invite and return an error
+      await prisma.invite.delete({
+        where: { id: invite.id },
+      });
+      return NextResponse.json(
+        { error: "Failed to send invite email" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(invite);
   } catch (error) {
